@@ -37,7 +37,9 @@
 #include <stdarg.h>
 
 typedef char *sds;
-
+// 明确的包含一个len字段,可以存储任意的二进制数据.C的str以0结尾,因此数据项里不能再有二进制0了.
+// buffer总是使用了len+1个空间,buf[len]==0.
+// 参见sdsnewlen()的实现,buf的时间空间为(len+free+1).
 struct sdshdr {
     unsigned int len;
     unsigned int free;
