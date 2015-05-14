@@ -55,6 +55,7 @@
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio. */
+//设为0也是可以rehash的，只不过阈值大一些。
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
 
@@ -68,6 +69,7 @@ static int _dictInit(dict *ht, dictType *type, void *privDataPtr);
 /* -------------------------- hash functions -------------------------------- */
 
 /* Thomas Wang's 32 bit Mix Function */
+// 不用了？？
 unsigned int dictIntHashFunction(unsigned int key)
 {
     key += ~(key << 15);
@@ -100,6 +102,8 @@ uint32_t dictGetHashFunctionSeed(void) {
  * 2. It will not produce the same results on little-endian and big-endian
  *    machines.
  */
+// 多字节数组哈希。
+// 四次一组，在计算余下的字节。
 unsigned int dictGenHashFunction(const void *key, int len) {
     /* 'm' and 'r' are mixing constants generated offline.
      They're not really 'magic', they just happen to work well.  */
@@ -144,6 +148,7 @@ unsigned int dictGenHashFunction(const void *key, int len) {
 }
 
 /* And a case insensitive hash function (based on djb hash) */
+// 名字里没体现出来insenstive。。
 unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
     unsigned int hash = (unsigned int)dict_hash_function_seed;
 
@@ -156,6 +161,7 @@ unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
 
 /* Reset a hash table already initialized with ht_init().
  * NOTE: This function should only be called by ht_destroy(). */
+// 仅仅是数据结构字段的reset，不包括resource release。
 static void _dictReset(dictht *ht)
 {
     ht->table = NULL;
@@ -180,8 +186,10 @@ int _dictInit(dict *d, dictType *type,
 {
     _dictReset(&d->ht[0]);
     _dictReset(&d->ht[1]);
+	// 多态操作 & 私有数据。
     d->type = type;
     d->privdata = privDataPtr;
+	
     d->rehashidx = -1;
     d->iterators = 0;
     return DICT_OK;
@@ -189,6 +197,7 @@ int _dictInit(dict *d, dictType *type,
 
 /* Resize the table to the minimal size that contains all the elements,
  * but with the invariant of a USED/BUCKETS ratio near to <= 1 */
+// 这是rehash启动的函数。也会用于init。
 int dictResize(dict *d)
 {
     int minimal;
@@ -228,6 +237,7 @@ int dictExpand(dict *d, unsigned long size)
     }
 
     /* Prepare a second hash table for incremental rehashing */
+	// 是不是总是rehash到1，rehash结束时swap(0,1); reset(1)??
     d->ht[1] = n;
     d->rehashidx = 0;
     return DICT_OK;
@@ -242,6 +252,8 @@ int dictExpand(dict *d, unsigned long size)
  * guaranteed that this function will rehash even a single bucket, since it
  * will visit at max N*10 empty buckets in total, otherwise the amount of
  * work it does would be unbound and the function may block for a long time. */
+// 每次最多处理n个不空的桶，而不是n个元素（每个桶里可能多于一个元素，也可能为空）。
+// 因为顺序处理，本次循环最多处理n*10个空桶退出。
 int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     if (!dictIsRehashing(d)) return 0;
@@ -295,6 +307,7 @@ long long timeInMilliseconds(void) {
 }
 
 /* Rehash for an amount of time between ms milliseconds and ms+1 milliseconds */
+// rehash多长时间，每次100个，只要时间不超过。
 int dictRehashMilliseconds(dict *d, int ms) {
     long long start = timeInMilliseconds();
     int rehashes = 0;
@@ -314,6 +327,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * This function is called by common lookup or update operations in the
  * dictionary so that the hash table automatically migrates from H1 to H2
  * while it is actively used. */
+// safe iterator到底怎么弄的？
 static void _dictRehashStep(dict *d) {
     if (d->iterators == 0) dictRehash(d,1);
 }
@@ -343,12 +357,14 @@ int dictAdd(dict *d, void *key, void *val)
  * If key already exists NULL is returned.
  * If key was added, the hash entry is returned to be manipulated by the caller.
  */
+// 真的是insert， 而不是update。
 dictEntry *dictAddRaw(dict *d, void *key)
 {
     int index;
     dictEntry *entry;
     dictht *ht;
 
+	// 每次处理一个桶。
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     /* Get the index of the new element, or -1 if
@@ -372,6 +388,8 @@ dictEntry *dictAddRaw(dict *d, void *key)
  * Return 1 if the key was added from scratch, 0 if there was already an
  * element with such key and dictReplace() just performed a value update
  * operation. */
+// 完成insert or delete
+// value的释放是？
 int dictReplace(dict *d, void *key, void *val)
 {
     dictEntry *entry, auxentry;
@@ -387,6 +405,7 @@ int dictReplace(dict *d, void *key, void *val)
      * as the previous one. In this context, think to reference counting,
      * you want to increment (set), and then decrement (free), and not the
      * reverse. */
+	// 使用了完整的dictEntry保存old数据，原因是接口就是这样的啊！
     auxentry = *entry;
     dictSetVal(d, entry, val);
     dictFreeVal(d, &auxentry);
@@ -428,6 +447,8 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
                 else
                     d->ht[table].table[idx] = he->next;
                 if (!nofree) {
+					// 如果不free的话，调用方如何得到这两个kv指针呢？
+					// attention!
                     dictFreeKey(d, he);
                     dictFreeVal(d, he);
                 }
@@ -447,6 +468,7 @@ int dictDelete(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,0);
 }
 
+// 不free kv的函数到底用在什么场景呢？？？？
 int dictDeleteNoFree(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,1);
 }
@@ -459,6 +481,7 @@ int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
     for (i = 0; i < ht->size && ht->used > 0; i++) {
         dictEntry *he, *nextHe;
 
+		// 这个callback怎么用？什么场景？？
         if (callback && (i & 65535) == 0) callback(d->privdata);
 
         if ((he = ht->table[i]) == NULL) continue;
@@ -494,6 +517,7 @@ dictEntry *dictFind(dict *d, const void *key)
     if (d->ht[0].size == 0) return NULL; /* We don't have a table at all */
     if (dictIsRehashing(d)) _dictRehashStep(d);
     h = dictHashKey(d, key);
+	// 依然从0开始，0/1里不会有重复的key。
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
         he = d->ht[table].table[idx];
@@ -520,6 +544,8 @@ void *dictFetchValue(dict *d, const void *key) {
  * the fingerprint again when the iterator is released.
  * If the two fingerprints are different it means that the user of the iterator
  * performed forbidden operations against the dictionary while iterating. */
+// 获得当前状态的指纹。
+// 做都做了然后呢？
 long long dictFingerprint(dict *d) {
     long long integers[6], hash = 0;
     int j;
@@ -942,6 +968,7 @@ static int _dictExpandIfNeeded(dict *d)
 }
 
 /* Our hash table capability is a power of two */
+// 注意size是unsigned long的，跟LONG_SIZE比一下的话while里就不会因为一处产生死循环了。
 static unsigned long _dictNextPower(unsigned long size)
 {
     unsigned long i = DICT_HT_INITIAL_SIZE;
@@ -970,15 +997,20 @@ static int _dictKeyIndex(dict *d, const void *key)
         return -1;
     /* Compute the key hash value */
     h = dictHashKey(d, key);
+	// 两个表都会查。
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
         /* Search if this slot does not already contain the given key */
         he = d->ht[table].table[idx];
         while(he) {
+			// 相等才返回-1
+			// 并且是不是可以假设0/1里一定不会有重复的元素了？？
             if (dictCompareKeys(d, key, he->key))
                 return -1;
             he = he->next;
         }
+		// 因为ht[0] & ht[1]的idx是不一样的，这里和调用方对idx的理解由
+		// dictIsRehashing()函数决定，且维护了内外的一致性。
         if (!dictIsRehashing(d)) break;
     }
     return idx;

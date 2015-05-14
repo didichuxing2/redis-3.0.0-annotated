@@ -44,6 +44,8 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+// 开链防止冲突.
+// 具体的kv对.
 typedef struct dictEntry {
     void *key;
     union {
@@ -55,6 +57,7 @@ typedef struct dictEntry {
     struct dictEntry *next;
 } dictEntry;
 
+// 多态.
 typedef struct dictType {
     unsigned int (*hashFunction)(const void *key);
     void *(*keyDup)(void *privdata, const void *key);
@@ -66,6 +69,7 @@ typedef struct dictType {
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
+// dict hash table
 typedef struct dictht {
     dictEntry **table;
     unsigned long size;
@@ -73,12 +77,15 @@ typedef struct dictht {
     unsigned long used;
 } dictht;
 
+// private看dictType的函数指针声明.
 typedef struct dict {
     dictType *type;
     void *privdata;
+	// 这里是两个元素的数组，不是指针数组，所以肯定总是有效的。
+	// 然后rehash结束的时候会reset成为一个空的。
     dictht ht[2];
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-	// 这个字段什么用途?
+	// 这个字段什么用, 为何要计数?
     int iterators; /* number of iterators currently running */
 } dict;
 
@@ -105,6 +112,8 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
     if ((d)->type->valDestructor) \
         (d)->type->valDestructor((d)->privdata, (entry)->v.val)
 
+// dict赋值有可能产生一次拷贝的成本.
+// 由是否有dup指针决定.
 #define dictSetVal(d, entry, _val_) do { \
     if ((d)->type->valDup) \
         entry->v.val = (d)->type->valDup((d)->privdata, _val_); \
@@ -137,12 +146,14 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
         (d)->type->keyCompare((d)->privdata, key1, key2) : \
         (key1) == (key2))
 
+// hashFunction()是一个必填项？
 #define dictHashKey(d, key) (d)->type->hashFunction(key)
 #define dictGetKey(he) ((he)->key)
 #define dictGetVal(he) ((he)->v.val)
 #define dictGetSignedIntegerVal(he) ((he)->v.s64)
 #define dictGetUnsignedIntegerVal(he) ((he)->v.u64)
 #define dictGetDoubleVal(he) ((he)->v.d)
+// ht[1]指针总是有效的？？
 #define dictSlots(d) ((d)->ht[0].size+(d)->ht[1].size)
 #define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
