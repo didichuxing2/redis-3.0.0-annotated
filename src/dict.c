@@ -640,6 +640,7 @@ void dictReleaseIterator(dictIterator *iter)
             iter->d->iterators--;
         else
             assert(iter->fingerprint == dictFingerprint(iter->d));
+		// 这里有assert判断。
     }
     zfree(iter);
 }
@@ -654,6 +655,7 @@ dictEntry *dictGetRandomKey(dict *d)
 
     if (dictSize(d) == 0) return NULL;
     if (dictIsRehashing(d)) _dictRehashStep(d);
+	// 注意这里模的都是size，而不是used。
     if (dictIsRehashing(d)) {
         do {
             /* We are sure there are no elements in indexes from 0
@@ -665,6 +667,7 @@ dictEntry *dictGetRandomKey(dict *d)
                                       d->ht[0].table[h];
         } while(he == NULL);
     } else {
+		// while出来一个非null的，且开链的第二个及以后的元素永远不会被随机到。
         do {
             h = random() & d->ht[0].sizemask;
             he = d->ht[0].table[h];
@@ -709,6 +712,7 @@ dictEntry *dictGetRandomKey(dict *d)
  * of continuous elements to run some kind of algorithm or to produce
  * statistics. However the function is much faster than dictGetRandomKey()
  * at producing N elements. */
+// 这里的随机会选取整个桶里的元素。
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
     unsigned int j; /* internal hash table id, 0 or 1. */
     unsigned int tables; /* 1 or 2 tables? */
@@ -728,6 +732,7 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
 
     tables = dictIsRehashing(d) ? 2 : 1;
     maxsizemask = d->ht[0].sizemask;
+	// 选一个大的mask
     if (tables > 1 && maxsizemask < d->ht[1].sizemask)
         maxsizemask = d->ht[1].sizemask;
 
