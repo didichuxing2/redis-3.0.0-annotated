@@ -308,6 +308,7 @@ typedef long long mstime_t; /* millisecond time type. */
 /* Anti-warning macro... */
 #define REDIS_NOTUSED(V) ((void) V)
 
+// 跳表最大层数,二叉高度.
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^32 elements */
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
 
@@ -580,8 +581,10 @@ struct sharedObjectsStruct {
 };
 
 /* ZSETs use a specialized version of Skiplists */
+// 一个索引结构, robj abrie. for redisObject, 有ref count.
 typedef struct zskiplistNode {
     robj *obj;
+	// 这里的score什么意思?
     double score;
     struct zskiplistNode *backward;
     struct zskiplistLevel {

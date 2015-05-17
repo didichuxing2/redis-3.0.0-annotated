@@ -52,6 +52,7 @@ static uint8_t _intsetValueEncoding(int64_t v) {
 }
 
 /* Return the value at pos, given an encoding. */
+// encoding是有intset关联的, 这里为何选择作为参数传入, 而不直接读取intset的字段值.
 static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     int64_t v64;
     int32_t v32;
@@ -59,6 +60,7 @@ static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
 
     if (enc == INTSET_ENC_INT64) {
         memcpy(&v64,((int64_t*)is->contents)+pos,sizeof(v64));
+		// "持久化存储"里的都是小端!
         memrev64ifbe(&v64);
         return v64;
     } else if (enc == INTSET_ENC_INT32) {
@@ -102,6 +104,7 @@ intset *intsetNew(void) {
 }
 
 /* Resize the intset */
+// size-fixed, why?
 static intset *intsetResize(intset *is, uint32_t len) {
     uint32_t size = len*intrev32ifbe(is->encoding);
     is = zrealloc(is,sizeof(intset)+size);
@@ -123,6 +126,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     } else {
         /* Check for the case where we know we cannot find the value,
          * but do know the insert position. */
+		// 仅仅是判断有没有.
         if (value > _intsetGet(is,intrev32ifbe(is->length)-1)) {
             if (pos) *pos = intrev32ifbe(is->length);
             return 0;
@@ -133,6 +137,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     }
 
     while(max >= min) {
+		// 通过类型转换防止溢出.
         mid = ((unsigned int)min + (unsigned int)max) >> 1;
         cur = _intsetGet(is,mid);
         if (value > cur) {
@@ -140,6 +145,8 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
         } else if (value < cur) {
             max = mid-1;
         } else {
+			// min & mid 都可能是有效的, 需要判断
+			// 但是避免了无效的操作.
             break;
         }
     }
@@ -158,10 +165,13 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
     uint8_t newenc = _intsetValueEncoding(value);
     int length = intrev32ifbe(is->length);
+	// 新元素导致升级, 则新元素的插入位置只有两个可能.
     int prepend = value < 0 ? 1 : 0;
 
     /* First set new encoding and resize */
     is->encoding = intrev32ifbe(newenc);
+	// 肯定是要走一遍内存管理的, 为何不预留空间??
+	// question?
     is = intsetResize(is,intrev32ifbe(is->length)+1);
 
     /* Upgrade back-to-front so we don't overwrite values.
@@ -243,6 +253,9 @@ intset *intsetRemove(intset *is, int64_t value, int *success) {
         if (success) *success = 1;
 
         /* Overwrite value with tail and update length */
+		// 需要删除的是最后一个元素, 则不需要移动了.
+		// 即使传入, memmove()移动一个0字节长度的数组.
+		// 一次判断替换一个函数调用.
         if (pos < (len-1)) intsetMoveTail(is,pos+1,pos);
         is = intsetResize(is,len-1);
         is->length = intrev32ifbe(len-1);
@@ -277,6 +290,7 @@ uint32_t intsetLen(intset *is) {
 }
 
 /* Return intset blob size in bytes. */
+// 持久化使用(?)
 size_t intsetBlobLen(intset *is) {
     return sizeof(intset)+intrev32ifbe(is->length)*intrev32ifbe(is->encoding);
 }

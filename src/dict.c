@@ -894,6 +894,7 @@ unsigned long dictScan(dict *d,
 
         /* Emit entries at cursor */
         de = t0->table[v & m0];
+		// 这里的最小单位只能是一个bucket了吗?
         while (de) {
             fn(privdata, de);
             de = de->next;

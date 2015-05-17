@@ -32,8 +32,14 @@
 #define __INTSET_H
 #include <stdint.h>
 
+// 整数集合.
+// 该数据结构是一个定长数据结构??
+// 升级 降级 又是怎么回事?
+// 不支持降级操作.
 typedef struct intset {
+	// 该字段真正决定了contents数组的类型.
     uint32_t encoding;
+	// 该字段记录contents中元素个数(按真实类型).
     uint32_t length;
     int8_t contents[];
 } intset;
