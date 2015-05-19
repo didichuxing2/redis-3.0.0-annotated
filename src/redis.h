@@ -194,9 +194,18 @@ typedef long long mstime_t; /* millisecond time type. */
 //	linkedlist: 
 //	list里保存了整数且可被long型存储, 如何处理? 会有string类型的哪些选择吗?
 // hash
-//	ziplist:
+//	ziplist: 插入的键值对按顺序插入的列表里, k1,v1,k2,v2,k3,v3,...
+//		保存的键值对少于512, 且键和值字符串长度都小于64
 //	hashtable(dict):
-
+// set
+//	intset: 保存的都是整数值, 且个数少于512个.
+//	hashtable: value设置为NULL
+// sorted set:
+//		使用一个score进行排序, score由用户设置元素时指定.
+//	ziplist: v1,s1,v2,s2,... 且按照分值由小到大排序.
+//		元素个数小于128, 且所有元素长度小于64字节.
+//	zset(dict+skiplist): skiplist保存了按照score的顺序,dict保存了object->score的映射.
+//		 这种情况下, object encoding返回的是skiplist.
 
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
@@ -436,6 +445,7 @@ typedef struct redisObject {
 	// type指令返回的就是type字段值.
     unsigned type:4;
     unsigned encoding:4;
+	// 会溢出??
     unsigned lru:REDIS_LRU_BITS; /* lru time (relative to server.lruclock) */
     int refcount;
     void *ptr;
@@ -587,7 +597,7 @@ struct saveparam {
     time_t seconds;
     int changes;
 };
-
+// 这些都有可能被共享. refcount字段也只有在这些共享字段里被使用(?)
 struct sharedObjectsStruct {
     robj *crlf, *ok, *err, *emptybulk, *czero, *cone, *cnegone, *pong, *space,
     *colon, *nullbulk, *nullmultibulk, *queued,
