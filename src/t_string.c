@@ -147,7 +147,7 @@ int getGenericCommand(redisClient *c) {
 
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.nullbulk)) == NULL)
         return REDIS_OK;
-
+	// 这里比的是type字段, 不是encoding.
     if (o->type != REDIS_STRING) {
         addReply(c,shared.wrongtypeerr);
         return REDIS_ERR;

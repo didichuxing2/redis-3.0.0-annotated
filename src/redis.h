@@ -177,18 +177,37 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_CMD_FAST 8192                 /* "F" flag */
 
 /* Object types */
+// 对象类型
+// type key 返回该值
 #define REDIS_STRING 0
 #define REDIS_LIST 1
 #define REDIS_SET 2
 #define REDIS_ZSET 3
 #define REDIS_HASH 4
+// string
+//	int: 可以用用long型表示,直接存放在ptr里
+//	raw: sds, 大于32个字节. 该条件已经不生效,使用条件是??
+//	embstr:	分配sds空间时,直接直接分配redisObject+sdshdr整块空间.
+//		embstr是只读的,如果对该编码对象进行修改,则立刻转换为raw.
+// list
+//	ziplist: 保存的所有字符串小于64字节, 且元素个数小雨512
+//	linkedlist: 
+//	list里保存了整数且可被long型存储, 如何处理? 会有string类型的哪些选择吗?
+// hash
+//	ziplist:
+//	hashtable(dict):
+
 
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
+// 编码类型
+// object encoding keys 返回该值
+// sds
 #define REDIS_ENCODING_RAW 0     /* Raw representation */
 #define REDIS_ENCODING_INT 1     /* Encoded as integer */
 #define REDIS_ENCODING_HT 2      /* Encoded as hash table */
+// 新加类型
 #define REDIS_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
 #define REDIS_ENCODING_LINKEDLIST 4 /* Encoded as regular linked list */
 #define REDIS_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
@@ -411,6 +430,10 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_LRU_CLOCK_MAX ((1<<REDIS_LRU_BITS)-1) /* Max value of obj->lru */
 #define REDIS_LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
 typedef struct redisObject {
+	// type是数据类型,字符串/列表/哈希/集合/有序集合
+	// 同一数据类型会有不同的编码实现方式,比如哈希可能会用dict或ziplist实现.
+	// key总是string类型.
+	// type指令返回的就是type字段值.
     unsigned type:4;
     unsigned encoding:4;
     unsigned lru:REDIS_LRU_BITS; /* lru time (relative to server.lruclock) */
