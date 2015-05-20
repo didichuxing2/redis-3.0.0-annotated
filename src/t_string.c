@@ -91,6 +91,7 @@ void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *ex
 }
 
 /* SET key value [NX] [XX] [EX <seconds>] [PX <milliseconds>] */
+// XX 对应的getset实现吗?
 void setCommand(redisClient *c) {
     int j;
     robj *expire = NULL;

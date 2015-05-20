@@ -484,8 +484,13 @@ struct evictionPoolEntry {
 /* Redis database representation. There are multiple databases identified
  * by integers from 0 (the default database) up to the max configured
  * database. The database number is the 'id' field in the structure. */
+// select 0
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
+	// expires存储了键的过期时间, 值为过期时间点,绝对值.
+	// expires的key与dict的key指针指向同一个对象,所以不会有空间浪费, 出了dict本身的空间.
+	// 所以refcount不止用在int上面.
+	// 每次对key的操作都要有一次"是否超时"的判断吗? 那么时间复杂度的隐藏系数要直接乘2了
     dict *expires;              /* Timeout of keys with a timeout set */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP) */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
@@ -548,6 +553,7 @@ typedef struct readyList {
 typedef struct redisClient {
     uint64_t id;            /* Client incremental unique ID. */
     int fd;
+	// 客户端通过select选择的库, 默认0
     redisDb *db;
     int dictid;
     robj *name;             /* As set by CLIENT SETNAME */
@@ -686,6 +692,8 @@ struct redisServer {
     pid_t pid;                  /* Main process pid. */
     char *configfile;           /* Absolute config file path, or NULL */
     int hz;                     /* serverCron() calls frequency in hertz */
+	// 这里会new成一个数组, 个数由本结构体的dbnum决定.
+	// dbnum又由配置文件databse字段决定
     redisDb *db;
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
