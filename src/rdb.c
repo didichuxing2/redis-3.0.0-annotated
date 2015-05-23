@@ -40,12 +40,14 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 
+// 写binary data, 无任何额外处理.
 static int rdbWriteRaw(rio *rdb, void *p, size_t len) {
     if (rdb && rioWrite(rdb,p,len) == 0)
         return -1;
     return len;
 }
 
+// 根据这里的提示, type显然都是一个字节.
 int rdbSaveType(rio *rdb, unsigned char type) {
     return rdbWriteRaw(rdb,&type,1);
 }
@@ -90,6 +92,7 @@ int rdbSaveLen(rio *rdb, uint32_t len) {
         nwritten = 1;
     } else if (len < (1<<14)) {
         /* Save a 14 bit len */
+		// 大端
         buf[0] = ((len>>8)&0xFF)|(REDIS_RDB_14BITLEN<<6);
         buf[1] = len&0xFF;
         if (rdbWriteRaw(rdb,buf,2) == -1) return -1;
@@ -204,8 +207,10 @@ int rdbTryIntegerEncoding(char *s, size_t len, unsigned char *enc) {
 
     /* If the number converted back into a string is not identical
      * then it's not possible to encode the string as integer */
+	// 类似溢出校验之类.
     if (strlen(buf) != len || memcmp(buf,s,len)) return 0;
 
+	// 返回编码后的字节长度
     return rdbEncodeInteger(value,enc);
 }
 
@@ -303,6 +308,7 @@ int rdbSaveRawString(rio *rdb, unsigned char *s, size_t len) {
 int rdbSaveLongLongAsStringObject(rio *rdb, long long value) {
     unsigned char buf[32];
     int n, nwritten = 0;
+	// 首字节是带类型的
     int enclen = rdbEncodeInteger(value,buf);
     if (enclen > 0) {
         return rdbWriteRaw(rdb,buf,enclen);
@@ -476,6 +482,7 @@ int rdbLoadObjectType(rio *rdb) {
 }
 
 /* Save a Redis object. Returns -1 on error, number of bytes written on success. */
+// redis数据结构是"平"的, 不会有嵌套.
 int rdbSaveObject(rio *rdb, robj *o) {
     int n, nwritten = 0;
 
@@ -488,6 +495,7 @@ int rdbSaveObject(rio *rdb, robj *o) {
         if (o->encoding == REDIS_ENCODING_ZIPLIST) {
             size_t l = ziplistBlobLen((unsigned char*)o->ptr);
 
+			// ziplist直接写内存值, ziplist的api本身处理了大小端的问题, 因此不同机器下的内存布局是统一的.
             if ((n = rdbSaveRawString(rdb,o->ptr,l)) == -1) return -1;
             nwritten += n;
         } else if (o->encoding == REDIS_ENCODING_LINKEDLIST) {
@@ -580,6 +588,8 @@ int rdbSaveObject(rio *rdb, robj *o) {
 
                 if ((n = rdbSaveStringObject(rdb,key)) == -1) return -1;
                 nwritten += n;
+				// 最外层这里调用的是rdbSaveObject(), 这里调用的saveString.
+				// 所以, 没有嵌套.
                 if ((n = rdbSaveStringObject(rdb,val)) == -1) return -1;
                 nwritten += n;
             }
@@ -617,12 +627,16 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val,
         /* If this key is already expired skip it */
         if (expiretime < now) return 0;
         if (rdbSaveType(rdb,REDIS_RDB_OPCODE_EXPIRETIME_MS) == -1) return -1;
+		// 直接写一个8字节, 不变长
         if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return -1;
     }
 
     /* Save type, key, value */
+	// 这里实际保存的是type-encoding的组合值
     if (rdbSaveObjectType(rdb,val) == -1) return -1;
+	// 这里的key有可能被序列化成整数的.
     if (rdbSaveStringObject(rdb,key) == -1) return -1;
+	// 递归
     if (rdbSaveObject(rdb,val) == -1) return -1;
     return 1;
 }
@@ -656,6 +670,7 @@ int rdbSaveRio(rio *rdb, int *error) {
         if (!di) return REDIS_ERR;
 
         /* Write the SELECT DB opcode */
+		// 写入一条 select db-no 的指令
         if (rdbSaveType(rdb,REDIS_RDB_OPCODE_SELECTDB) == -1) goto werr;
         if (rdbSaveLen(rdb,j) == -1) goto werr;
 
@@ -716,6 +731,9 @@ werr: /* Write error. */
 }
 
 /* Save the DB on disk. Return REDIS_ERR on error, REDIS_OK on success. */
+// 他是怎么block住这一阶段的新请求的?并且返回拒绝?
+// 单进程?
+// 加了sleep()模拟了一下效果,是block,而不是拒绝.
 int rdbSave(char *filename) {
     char tmpfile[256];
     FILE *fp;
@@ -738,6 +756,7 @@ int rdbSave(char *filename) {
 
     /* Make sure data will not remain on the OS's output buffers */
     if (fflush(fp) == EOF) goto werr;
+	// 确保写到盘上.
     if (fsync(fileno(fp)) == -1) goto werr;
     if (fclose(fp) == EOF) goto werr;
 
@@ -761,6 +780,7 @@ werr:
     return REDIS_ERR;
 }
 
+// conf里的save选项可以同时设置多条, 任意一条满足就会开始save过程.
 int rdbSaveBackground(char *filename) {
     pid_t childpid;
     long long start;

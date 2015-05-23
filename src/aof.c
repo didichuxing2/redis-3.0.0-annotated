@@ -1260,9 +1260,11 @@ void aofClosePipes(void) {
  * 2) Redis calls this function, that forks():
  *    2a) the child rewrite the append only file in a temp file.
  *    2b) the parent accumulates differences in server.aof_rewrite_buf.
+ * 												是server.aof_rewrite_buf_blocks字段吗?
  * 3) When the child finished '2a' exists.
  * 4) The parent will trap the exit code, if it's OK, will append the
  *    data accumulated into server.aof_rewrite_buf into the temp file, and
+ *							这段时间会block主循环.
  *    finally will rename(2) the temp file in the actual file name.
  *    The the new file is reopened as the new append only file. Profit!
  */
@@ -1305,9 +1307,11 @@ int rewriteAppendOnlyFileBackground(void) {
         }
         redisLog(REDIS_NOTICE,
             "Background append only file rewriting started by pid %d",childpid);
+		// 有可能是通过scheduled启动的.
         server.aof_rewrite_scheduled = 0;
         server.aof_rewrite_time_start = time(NULL);
         server.aof_child_pid = childpid;
+		// 避免cow.
         updateDictResizePolicy();
         /* We set appendseldb to -1 in order to force the next call to the
          * feedAppendOnlyFile() to issue a SELECT command, so the differences
@@ -1324,6 +1328,8 @@ void bgrewriteaofCommand(redisClient *c) {
     if (server.aof_child_pid != -1) {
         addReplyError(c,"Background append only file rewriting already in progress");
     } else if (server.rdb_child_pid != -1) {
+		// 不会同时进行.
+		// 机制可以同时开启.
         server.aof_rewrite_scheduled = 1;
         addReplyStatus(c,"Background append only file rewriting scheduled");
     } else if (rewriteAppendOnlyFileBackground() == REDIS_OK) {

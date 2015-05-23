@@ -47,6 +47,7 @@
 // 开链防止冲突.
 // 具体的kv对.
 typedef struct dictEntry {
+	// 这里应该直接保存的是sds
     void *key;
     union {
         void *val;

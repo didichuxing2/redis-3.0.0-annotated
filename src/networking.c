@@ -73,6 +73,7 @@ redisClient *createClient(int fd) {
         anetEnableTcpNoDelay(NULL,fd);
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
+		// 这里指定的时间处理器: readQueryFromClient
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -581,6 +582,9 @@ void copyClientOutputBuffer(redisClient *dst, redisClient *src) {
 }
 
 #define MAX_ACCEPTS_PER_CALL 1000
+// 连接进来的一定是client? slave怎么处理?
+// 那里放入到事件队列里的?
+//	A: createClient() 会调用 aeCreateFileEvent() 函数加入到事件队列里.
 static void acceptCommonHandler(int fd, int flags) {
     redisClient *c;
     if ((c = createClient(fd)) == NULL) {
@@ -616,6 +620,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     REDIS_NOTUSED(mask);
     REDIS_NOTUSED(privdata);
 
+	// 可能会有持续不断的连接请求进来,每次accept一个效率又太低.
     while(max--) {
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
@@ -989,6 +994,7 @@ int processMultibulkBuffer(redisClient *c) {
     int pos = 0, ok;
     long long ll;
 
+	// 这里读取该命令的字段数.
     if (c->multibulklen == 0) {
         /* The client should have been reset */
         redisAssertWithInfo(c,NULL,c->argc == 0);
@@ -1011,6 +1017,7 @@ int processMultibulkBuffer(redisClient *c) {
          * so go ahead and find out the multi bulk length. */
         redisAssertWithInfo(c,NULL,c->querybuf[0] == '*');
         ok = string2ll(c->querybuf+1,newline-(c->querybuf+1),&ll);
+		// 命令协议中最大字段数.
         if (!ok || ll > 1024*1024) {
             addReplyError(c,"Protocol error: invalid multibulk length");
             setProtocolError(c,pos);
@@ -1145,6 +1152,8 @@ void processInputBuffer(redisClient *c) {
             }
         }
 
+		// 注意这两个break
+		// 没读全则break
         if (c->reqtype == REDIS_REQ_INLINE) {
             if (processInlineBuffer(c) != REDIS_OK) break;
         } else if (c->reqtype == REDIS_REQ_MULTIBULK) {
@@ -1164,6 +1173,8 @@ void processInputBuffer(redisClient *c) {
     }
 }
 
+// 命令请求处理器
+// 请求必须一次能读完? 且必须读完??
 void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     redisClient *c = (redisClient*) privdata;
     int nread, readlen;
