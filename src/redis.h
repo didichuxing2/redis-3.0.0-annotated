@@ -258,6 +258,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_AOF_WAIT_REWRITE 2    /* AOF waits rewrite to start appending */
 
 /* Client flags */
+// redisClient::flag
 #define REDIS_SLAVE (1<<0)   /* This client is a slave server */
 #define REDIS_MASTER (1<<1)  /* This client is a master server */
 #define REDIS_MONITOR (1<<2) /* This client is a slave monitor, see MONITOR */
@@ -552,7 +553,10 @@ typedef struct readyList {
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct redisClient {
+	// 见createClient()函数
+	// 这个自增有什么用?
     uint64_t id;            /* Client incremental unique ID. */
+	// 套接字描述符
     int fd;
 	// 客户端通过select选择的库, 默认0
     redisDb *db;
@@ -569,6 +573,8 @@ typedef struct redisClient {
     int reqtype;
     int multibulklen;       /* number of multi bulk arguments left to read */
     long bulklen;           /* length of bulk argument in multi bulk request */
+	// 可变大小Response data缓冲区
+	// 与buf的关系? 是buf的替代? 还是buf的补充?
     list *reply;
     unsigned long reply_bytes; /* Tot bytes of objects in reply list */
     int sentlen;            /* Amount of bytes already sent in the current
@@ -599,6 +605,7 @@ typedef struct redisClient {
     sds peerid;             /* Cached peer ID. */
 
     /* Response buffer */
+	// 固定大小缓冲区, 16K
     int bufpos;
     char buf[REDIS_REPLY_CHUNK_BYTES];
 } redisClient;
@@ -699,6 +706,7 @@ struct redisServer {
 	// 这里会new成一个数组, 个数由本结构体的dbnum决定.
 	// dbnum又由配置文件databse字段决定
     redisDb *db;
+	// redisCommandTable数组的索引
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
     aeEventLoop *el;
@@ -942,6 +950,8 @@ struct redisServer {
                                           there is at least an uncovered slot. */
     /* Scripting */
     lua_State *lua; /* The Lua interpreter. We use just one for all clients */
+	// 负责执行lua脚本的伪客户端.
+	// server整个生命周期内保持存活.
     redisClient *lua_client;   /* The "fake client" to query Redis from Lua */
     redisClient *lua_caller;   /* The client running EVAL right now, or NULL */
     dict *lua_scripts;         /* A dictionary of SHA1 -> Lua scripts */

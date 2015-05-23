@@ -121,6 +121,7 @@ struct redisServer server; /* server global state */
  *    are not fast commands.
  */
 // 支持的cmd, 以及对应的实现函数, 及其他一些属性信息.
+// 如何进行索引呢?
 struct redisCommand redisCommandTable[] = {
     {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
     {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
