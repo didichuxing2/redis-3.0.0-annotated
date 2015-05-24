@@ -75,6 +75,8 @@ struct redisServer server; /* server global state */
  * name: a string representing the command name.
  * function: pointer to the C function implementing the command.
  * arity: number of arguments, it is possible to use -N to say >= N
+		这里的>=N是什么意思? set 参数个数>=3?? 不应该就是三个?
+
  * sflags: command flags as string. See below for a table of flags.
  * flags: flags as bitmask. Computed by Redis using the 'sflags' field.
  * get_keys_proc: an optional function to get key arguments from a command.
@@ -97,28 +99,42 @@ struct redisServer server; /* server global state */
  * This is the meaning of the flags:
  *
  * w: write command (may modify the key space).
+		REDIS_CMD_WRITE
  * r: read command  (will never modify the key space).
+		REDIS_CMD_READ
  * m: may increase memory usage once called. Don't allow if out of memory.
+		REDIS_CMD_DENYOOM
  * a: admin command, like SAVE or SHUTDOWN.
+		REDIS_CMD_ADMIN
  * p: Pub/Sub related command.
+		REDIS_CMD_PUBSUB
  * f: force replication of this command, regardless of server.dirty.
+		废弃??
  * s: command not allowed in scripts.
+		REDIS_CMD_NOSCRIPT
  * R: random command. Command is not deterministic, that is, the same command
  *    with the same arguments, with the same key space, may have different
  *    results. For instance SPOP and RANDOMKEY are two random commands.
+		REDIS_CMD_RANDOM
  * S: Sort command output array if called from script, so that the output
  *    is deterministic.
+		REDIS_CMD_SORT_FOR_SCRIPT
  * l: Allow command while loading the database.
+		REDIS_CMD_LOADING
  * t: Allow command while a slave has stale data but is not allowed to
  *    server this data. Normally no command is accepted in this condition
  *    but just a few.
+		REDIS_CMD_STALE
  * M: Do not automatically propagate the command on MONITOR.
+		REDIS_CMD_SKIP_MONITOR
  * k: Perform an implicit ASKING for this command, so the command will be
  *    accepted in cluster mode if the slot is marked as 'importing'.
+		REDIS_CMD_ASKING
  * F: Fast command: O(1) or O(log(N)) command that should never delay
  *    its execution as long as the kernel scheduler is giving us time.
  *    Note that commands that may trigger a DEL as a side effect (like SET)
  *    are not fast commands.
+		REDIS_CMD_FAST
  */
 // 支持的cmd, 以及对应的实现函数, 及其他一些属性信息.
 // 如何进行索引呢?
@@ -1099,7 +1115,16 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      *
      * Note that you can change the resolution altering the
      * REDIS_LRU_CLOCK_RESOLUTION define. */
+	// 的确是每10s更新一次, 怎么做到的??
+	// 在于getLRUClock()的实现
+	// code from 2.6.17
+	//  #define REDIS_LRU_CLOCK_RESOLUTION 10
+	//	void updateLRUClock(void) {
+    //	server.lruclock = (server.unixtime/REDIS_LRU_CLOCK_RESOLUTION) & REDIS_LRU_CLOCK_MAX;
+	//	}
+	// 所以这个版本的精度是1秒.
     server.lruclock = getLRUClock();
+	
 
     /* Record the max memory used since the server was started. */
     if (zmalloc_used_memory() > server.stat_peak_memory)
@@ -1110,6 +1135,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* We received a SIGTERM, shutting down here in a safe way, as it is
      * not ok doing so inside the signal handler. */
+	// 优雅退出
     if (server.shutdown_asap) {
         if (prepareForShutdown(0) == REDIS_OK) exit(0);
         redisLog(REDIS_WARNING,"SIGTERM received but errors trying to shut down the server, check the logs for more information");
@@ -1417,6 +1443,7 @@ void initServerConfig(void) {
     server.maxidletime = REDIS_MAXIDLETIME;
     server.tcpkeepalive = REDIS_DEFAULT_TCP_KEEPALIVE;
     server.active_expire_enabled = 1;
+	// 这不是一个可配置的??? 1G
     server.client_max_querybuf_len = REDIS_MAX_QUERYBUF_LEN;
     server.saveparams = NULL;
     server.loading = 0;
@@ -1529,9 +1556,11 @@ void initServerConfig(void) {
     /* Command table -- we initiialize it here as it is part of the
      * initial configuration, since command names may be changed via
      * redis.conf using the rename-command directive. */
+	// 初始化存储cmd的dict
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
     populateCommandTable();
+	// 这几个什么意思?
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
     server.lpushCommand = lookupCommandByCString("lpush");
@@ -1757,6 +1786,7 @@ void initServer(void) {
             server.syslog_facility);
     }
 
+	// 初始化一些数据结构
     server.pid = getpid();
     server.current_client = NULL;
     server.clients = listCreate();
@@ -1837,6 +1867,7 @@ void initServer(void) {
 
     /* Create the serverCron() time event, that's our main way to process
      * background operations. */
+	// 添加时间时间: serverCron()
     if(aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         redisPanic("Can't create the serverCron time event.");
         exit(1);
@@ -1844,6 +1875,7 @@ void initServer(void) {
 
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
+	// 添加文件事件: aceeptTcpHandler()
     for (j = 0; j < server.ipfd_count; j++) {
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
             acceptTcpHandler,NULL) == AE_ERR)
@@ -1881,6 +1913,7 @@ void initServer(void) {
     scriptingInit();
     slowlogInit();
     latencyMonitorInit();
+	// bio??
     bioInit();
 }
 
@@ -2056,6 +2089,7 @@ void call(redisClient *c, int flags) {
     c->cmd->proc(c);
     duration = ustime()-start;
     dirty = server.dirty-dirty;
+	// 这个dirty什么意思?
     if (dirty < 0) dirty = 0;
 
     /* When EVAL is called loading the AOF we don't want commands called
@@ -2075,6 +2109,7 @@ void call(redisClient *c, int flags) {
 
     /* Log the command into the Slow log if needed, and populate the
      * per-command statistics that we show in INFO commandstats. */
+	// 慢查询
     if (flags & REDIS_CALL_SLOWLOG && c->cmd->proc != execCommand) {
         char *latency_event = (c->cmd->flags & REDIS_CMD_FAST) ?
                               "fast-command" : "command";
@@ -2154,6 +2189,7 @@ int processCommand(redisClient *c) {
     }
 
     /* Check if the user is authenticated */
+	// 授权验证
     if (server.requirepass && !c->authenticated && c->cmd->proc != authCommand)
     {
         flagTransaction(c);
@@ -2195,6 +2231,7 @@ int processCommand(redisClient *c) {
      * is returning an error. */
     if (server.maxmemory) {
         int retval = freeMemoryIfNeeded();
+		// 降到配置的内存值阈值一下就返回OK
         if ((c->cmd->flags & REDIS_CMD_DENYOOM) && retval == REDIS_ERR) {
             flagTransaction(c);
             addReply(c, shared.oomerr);
@@ -2204,6 +2241,7 @@ int processCommand(redisClient *c) {
 
     /* Don't accept write commands if there are problems persisting on disk
      * and if this is a master instance. */
+	// 那就是处在一个异常状态? 怎么恢复??
     if (((server.stop_writes_on_bgsave_err &&
           server.saveparamslen > 0 &&
           server.lastbgsave_status == REDIS_ERR) ||
@@ -2247,6 +2285,7 @@ int processCommand(redisClient *c) {
     }
 
     /* Only allow SUBSCRIBE and UNSUBSCRIBE in the context of Pub/Sub */
+	// 如果客户端进入sub模型, 则只能执行unsub, 不应发过来其他指令
     if (c->flags & REDIS_PUBSUB &&
         c->cmd->proc != pingCommand &&
         c->cmd->proc != subscribeCommand &&
@@ -2270,6 +2309,7 @@ int processCommand(redisClient *c) {
 
     /* Loading DB? Return an error if the command has not the
      * REDIS_CMD_LOADING flag. */
+	// 为什么会有这种case??
     if (server.loading && !(c->cmd->flags & REDIS_CMD_LOADING)) {
         addReply(c, shared.loadingerr);
         return REDIS_OK;
@@ -2292,6 +2332,7 @@ int processCommand(redisClient *c) {
     }
 
     /* Exec the command */
+	// 事务的实现逻辑, 缓存指令
     if (c->flags & REDIS_MULTI &&
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
@@ -2299,6 +2340,7 @@ int processCommand(redisClient *c) {
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {
+		// 指令实现函数调用
         call(c,REDIS_CALL_FULL);
         c->woff = server.master_repl_offset;
         if (listLength(server.ready_keys))
@@ -3662,6 +3704,7 @@ int main(int argc, char **argv) {
         linuxMemoryWarnings();
     #endif
         checkTcpBacklogSettings();
+		// 从 aof rdb 恢复数据
         loadDataFromDisk();
         if (server.cluster_enabled) {
             if (verifyClusterConfigWithData() == REDIS_ERR) {

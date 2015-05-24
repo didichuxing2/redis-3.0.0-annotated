@@ -79,6 +79,7 @@ void resetServerSaveParams(void) {
     server.saveparamslen = 0;
 }
 
+// 从配置文件更新配置.
 void loadServerConfigFromString(char *config) {
     char *err = NULL;
     int linenum = 0, totlines, i;

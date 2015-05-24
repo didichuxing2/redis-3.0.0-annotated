@@ -623,6 +623,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 
 	// 可能会有持续不断的连接请求进来,每次accept一个效率又太低.
     while(max--) {
+		// 这里获取的ip/port仅仅用于日志输出吗?
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)
@@ -995,6 +996,7 @@ int processMultibulkBuffer(redisClient *c) {
     int pos = 0, ok;
     long long ll;
 
+	// 开始一次全新的bulk处理过程.
 	// 这里读取该命令的字段数.
     if (c->multibulklen == 0) {
         /* The client should have been reset */
@@ -1003,6 +1005,8 @@ int processMultibulkBuffer(redisClient *c) {
         /* Multi bulk length cannot be read without a \r\n */
         newline = strchr(c->querybuf,'\r');
         if (newline == NULL) {
+			// 这个出错条件是什么意思??
+			// readQueryFromClient() 不是已经又一次>1G的错误检测了吗?
             if (sdslen(c->querybuf) > REDIS_INLINE_MAX_SIZE) {
                 addReplyError(c,"Protocol error: too big mbulk count string");
                 setProtocolError(c,0);
@@ -1011,6 +1015,7 @@ int processMultibulkBuffer(redisClient *c) {
         }
 
         /* Buffer should also contain \n */
+		// 即首行的bulk-number什么都没传
         if (newline-(c->querybuf) > ((signed)sdslen(c->querybuf)-2))
             return REDIS_ERR;
 
@@ -1019,12 +1024,14 @@ int processMultibulkBuffer(redisClient *c) {
         redisAssertWithInfo(c,NULL,c->querybuf[0] == '*');
         ok = string2ll(c->querybuf+1,newline-(c->querybuf+1),&ll);
 		// 命令协议中最大字段数.
+		// 不能超过1M个
         if (!ok || ll > 1024*1024) {
             addReplyError(c,"Protocol error: invalid multibulk length");
             setProtocolError(c,pos);
             return REDIS_ERR;
         }
 
+		// 这是什么逻辑? 针对什么case?
         pos = (newline-c->querybuf)+2;
         if (ll <= 0) {
             sdsrange(c->querybuf,pos,-1);
@@ -1035,6 +1042,7 @@ int processMultibulkBuffer(redisClient *c) {
 
         /* Setup argv array on client structure */
         if (c->argv) zfree(c->argv);
+		// 指针数组
         c->argv = zmalloc(sizeof(robj*)*c->multibulklen);
     }
 
@@ -1200,10 +1208,12 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
 
     qblen = sdslen(c->querybuf);
+	// 更新完峰值再执行read(), 是否在read()完更新更好?
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
     nread = read(fd, c->querybuf+qblen, readlen);
     if (nread == -1) {
+		// nonblock!!!!!
         if (errno == EAGAIN) {
             nread = 0;
         } else {
@@ -1225,6 +1235,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         server.current_client = NULL;
         return;
     }
+	// 用户发送的query长度不能超过1G
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
 

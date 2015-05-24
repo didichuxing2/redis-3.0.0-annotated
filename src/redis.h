@@ -563,15 +563,23 @@ typedef struct redisClient {
     int dictid;
     robj *name;             /* As set by CLIENT SETNAME */
 	// 用户请求可能会一次收不全, 这个是缓存.
+	// 初始化为字符串 ""
     sds querybuf;
+	// 实际query的峰值
+	// 见readQueryFromClient()相关注释.
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size */
     int argc;
+	// 指针数组
     robj **argv;
     struct redisCommand *cmd, *lastcmd;
 
-	// 
+	// 初始化为0
+	// 正确的类型值为 1 or 2
     int reqtype;
+	// 保存一共有多少个字段
     int multibulklen;       /* number of multi bulk arguments left to read */
+	// 该字段内剩余多少字节需要读取
+	// 初始化为-1
     long bulklen;           /* length of bulk argument in multi bulk request */
 	// 可变大小Response data缓冲区
 	// 与buf的关系? 是buf的替代? 还是buf的补充?
@@ -595,6 +603,7 @@ typedef struct redisClient {
     long long repl_ack_time;/* replication ack time, if this is a slave */
     char replrunid[REDIS_RUN_ID_SIZE+1]; /* master run id if this is a master */
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
+	// 事务逻辑里, 缓存多条指令.
     multiState mstate;      /* MULTI/EXEC state */
     int btype;              /* Type of blocking op if REDIS_BLOCKED. */
     blockingState bpop;     /* blocking state */
@@ -710,6 +719,7 @@ struct redisServer {
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
     aeEventLoop *el;
+	// 单位: 秒
     unsigned lruclock:REDIS_LRU_BITS; /* Clock for LRU eviction */
     int shutdown_asap;          /* SHUTDOWN needed ASAP */
     int activerehashing;        /* Incremental rehash in serverCron() */
@@ -932,7 +942,11 @@ struct redisServer {
     size_t zset_max_ziplist_entries;
     size_t zset_max_ziplist_value;
     size_t hll_sparse_max_bytes;
+	// 低精度始终, 精度有hz决定
+	// updateCachedTime()
+	// 单位: 秒
     time_t unixtime;        /* Unix time sampled every cron cycle. */
+	// 单位: 毫秒
     long long mstime;       /* Like 'unixtime' but with milliseconds resolution. */
     /* Pubsub */
     dict *pubsub_channels;  /* Map channels to list of subscribed clients */
@@ -984,7 +998,9 @@ typedef void redisCommandProc(redisClient *c);
 typedef int *redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
 struct redisCommand {
     char *name;
+	// 实现函数, 传入的是the pointer of redisClient object
     redisCommandProc *proc;
+	// 接受的参数个数
     int arity;
     char *sflags; /* Flags as string representation, one char per flag. */
     int flags;    /* The actual flags, obtained from the 'sflags' field. */
@@ -995,6 +1011,7 @@ struct redisCommand {
     int firstkey; /* The first argument that's a key (0 = no keys) */
     int lastkey;  /* The last argument that's a key */
     int keystep;  /* The step between first and last key */
+	// calls 总共执行多少次, 总耗时多长.
     long long microseconds, calls;
 };
 
