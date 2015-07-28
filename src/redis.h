@@ -602,6 +602,8 @@ typedef struct redisClient {
     long long repl_ack_off; /* replication ack offset, if this is a slave */
     long long repl_ack_time;/* replication ack time, if this is a slave */
     char replrunid[REDIS_RUN_ID_SIZE+1]; /* master run id if this is a master */
+	// 这个字段什么用途?
+	// 唯一的用途是在master执行 info replication 时输出配置信息.
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
 	// 事务逻辑里, 缓存多条指令.
     multiState mstate;      /* MULTI/EXEC state */
@@ -888,6 +890,8 @@ struct redisServer {
     int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
     int repl_diskless_sync;         /* Send RDB to slaves sockets directly. */
     int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
+
+	// 主从复制相关
     /* Replication (slave) */
     char *masterauth;               /* AUTH with this password with master */
     char *masterhost;               /* Hostname of master */

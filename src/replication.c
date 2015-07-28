@@ -1208,6 +1208,7 @@ int slaveTryPartialResynchronization(int fd) {
     return PSYNC_NOT_SUPPORTED;
 }
 
+// 连接成功后的回掉
 void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     char tmpfile[256], *err;
     int dfd, maxtries = 5;
@@ -1501,6 +1502,7 @@ void slaveofCommand(redisClient *c) {
         }
         /* There was no previous master or the user specified a different one,
          * we can continue. */
+		// 复杂的操作进行了抽象.
         replicationSetMaster(c->argv[1]->ptr, port);
         redisLog(REDIS_NOTICE,"SLAVE OF %s:%d enabled (user request)",
             server.masterhost, server.masterport);
@@ -1654,6 +1656,7 @@ void replicationResurrectCachedMaster(int newfd) {
     server.master->flags &= ~(REDIS_CLOSE_AFTER_REPLY|REDIS_CLOSE_ASAP);
     server.master->authenticated = 1;
     server.master->lastinteraction = server.unixtime;
+	// 状态设置
     server.repl_state = REDIS_REPL_CONNECTED;
 
     /* Re-add to the list of clients. */
@@ -1934,6 +1937,7 @@ long long replicationGetSlaveOffset(void) {
 
 /* --------------------------- REPLICATION CRON  ---------------------------- */
 
+// 这个时间不可以配置吗?
 /* Replication cron function, called 1 time per second. */
 void replicationCron(void) {
     /* Non blocking connection timeout? */
