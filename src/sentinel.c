@@ -121,8 +121,10 @@ typedef struct sentinelRedisInstance {
     char *runid;    /* run ID of this instance. */
     uint64_t config_epoch;  /* Configuration epoch. */
     sentinelAddr *addr; /* Master host. */
+	// 命令连接
     redisAsyncContext *cc; /* Hiredis context for commands. */
-    redisAsyncContext *pc; /* Hiredis context for Pub / Sub. */
+    // 订阅连接
+	redisAsyncContext *pc; /* Hiredis context for Pub / Sub. */
     int pending_commands;   /* Number of commands sent waiting for a reply. */
     mstime_t cc_conn_time; /* cc connection time. */
     mstime_t pc_conn_time; /* pc connection time. */
@@ -158,6 +160,8 @@ typedef struct sentinelRedisInstance {
 
     /* Master specific. */
     dict *sentinels;    /* Other sentinels monitoring the same master. */
+	// 该主对应的从机
+	// info 返回的slave少了某台slave如何处理
     dict *slaves;       /* Slaves for this master instance. */
     unsigned int quorum;/* Number of sentinels that need to agree on failure. */
     int parallel_syncs; /* How many slaves to reconfigure at same time. */
@@ -173,6 +177,8 @@ typedef struct sentinelRedisInstance {
     int slave_master_link_status; /* Master link status as reported by INFO */
     unsigned long long slave_repl_offset; /* Slave replication offset. */
     /* Failover */
+	// leader是master级别的吗?
+	// 不同的master会有不同的sentinel leader?
     char *leader;       /* If this is a master instance, this is the runid of
                            the Sentinel that should perform the failover. If
                            this is a Sentinel, this is the runid of the Sentinel
@@ -193,6 +199,7 @@ typedef struct sentinelRedisInstance {
 } sentinelRedisInstance;
 
 /* Main state. */
+// sentinel state 
 struct sentinelState {
     uint64_t current_epoch;     /* Current epoch. */
     dict *masters;      /* Dictionary of master sentinelRedisInstances.
