@@ -36,6 +36,7 @@
 struct clusterNode;
 
 /* clusterLink encapsulates everything needed to talk with a remote node. */
+// 与节点对应的 网络连接 相关的信息
 typedef struct clusterLink {
     mstime_t ctime;             /* Link creation time */
     int fd;                     /* TCP socket file descriptor */
@@ -78,6 +79,7 @@ typedef struct clusterNodeFailReport {
     mstime_t time;             /* Time of the last report from this node. */
 } clusterNodeFailReport;
 
+// 集群中一个节点的信息
 typedef struct clusterNode {
     mstime_t ctime; /* Node object creation time. */
     char name[REDIS_CLUSTER_NAMELEN]; /* Node name, hex string, sha1-size */
@@ -100,6 +102,7 @@ typedef struct clusterNode {
     list *fail_reports;         /* List of nodes signaling this as failing */
 } clusterNode;
 
+// 集群信息
 typedef struct clusterState {
     clusterNode *myself;  /* This node */
     uint64_t currentEpoch;

@@ -646,6 +646,7 @@ struct sharedObjectsStruct {
 typedef struct zskiplistNode {
     robj *obj;
 	// 这里的score什么意思?
+	// cluster模式下, 记录 item 的槽位号
     double score;
     struct zskiplistNode *backward;
     struct zskiplistLevel {
