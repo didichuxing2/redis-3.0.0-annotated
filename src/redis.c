@@ -2333,6 +2333,7 @@ int processCommand(redisClient *c) {
 
     /* Exec the command */
 	// 事务的实现逻辑, 缓存指令
+	// 事务状态, 且指令不是 exec/discard/multi/watch 
     if (c->flags & REDIS_MULTI &&
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)

@@ -496,6 +496,8 @@ typedef struct redisDb {
     dict *expires;              /* Timeout of keys with a timeout set */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP) */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
+	// 以db为纬度维护watched的key列表,键是key,值是列表,列表元素是监控该key的客户端,
+	// 事务是不可以嵌套的,所以...
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
     struct evictionPoolEntry *eviction_pool;    /* Eviction pool of keys */
     int id;                     /* Database ID */
@@ -510,7 +512,9 @@ typedef struct multiCmd {
 } multiCmd;
 
 typedef struct multiState {
+	// 命令队列
     multiCmd *commands;     /* Array of MULTI commands */
+	// 已入队命令计数
     int count;              /* Total number of MULTI commands */
     int minreplicas;        /* MINREPLICAS for synchronous replication */
     time_t minreplicas_timeout; /* MINREPLICAS timeout as unixtime. */

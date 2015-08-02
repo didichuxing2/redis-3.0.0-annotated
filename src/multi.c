@@ -83,6 +83,7 @@ void flagTransaction(redisClient *c) {
         c->flags |= REDIS_DIRTY_EXEC;
 }
 
+// 指令的实现, 设置标志位.
 void multiCommand(redisClient *c) {
     if (c->flags & REDIS_MULTI) {
         addReplyError(c,"MULTI calls can not be nested");
@@ -129,6 +130,8 @@ void execCommand(redisClient *c) {
      * A failed EXEC in the first case returns a multi bulk nil object
      * (technically it is not an error but a special behavior), while
      * in the second an EXECABORT error is returned. */
+	// 当对watched的key做修改的时候, 会设置监控改key的client的flag位, 添加 DIRTY_CAS
+	// REDIS_DIRTY_EXEC 见函数flagTransaction(), 入队的指令不存在或参数错误
     if (c->flags & (REDIS_DIRTY_CAS|REDIS_DIRTY_EXEC)) {
         addReply(c, c->flags & REDIS_DIRTY_EXEC ? shared.execaborterr :
                                                   shared.nullmultibulk);
@@ -151,6 +154,7 @@ void execCommand(redisClient *c) {
          * This way we'll deliver the MULTI/..../EXEC block as a whole and
          * both the AOF and the replication link will have the same consistency
          * and atomicity guarantees. */
+		// 指令持久化, slave-cmd-buf feed
         if (!must_propagate && !(c->cmd->flags & REDIS_CMD_READONLY)) {
             execCommandPropagateMulti(c);
             must_propagate = 1;
@@ -179,6 +183,7 @@ handle_monitor:
      * table, and we do it here with correct ordering. */
     if (listLength(server.monitors) && !server.loading)
         replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+
 }
 
 /* ===================== WATCH (CAS alike for MULTI/EXEC) ===================
