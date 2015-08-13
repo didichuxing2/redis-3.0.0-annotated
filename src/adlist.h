@@ -31,18 +31,23 @@
 #ifndef __ADLIST_H__
 #define __ADLIST_H__
 
+// adlist is A Doubly linked List ??
+
 /* Node, List, and Iterator are the only data structures used currently. */
 // 双向链表
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
+	// value 保存保存在链表中的元素
     void *value;
 } listNode;
 // 迭代器!
+// 迭代过程中修改链表元素会怎样.
 typedef struct listIter {
     listNode *next;
     int direction;
 } listIter;
+
 // 多态
 typedef struct list {
     listNode *head;
@@ -68,6 +73,7 @@ typedef struct list {
 
 #define listGetDupMethod(l) ((l)->dup)
 // 这里不是listGetFreeMethod(l)
+// 命名方式的不统一
 #define listGetFree(l) ((l)->free)
 #define listGetMatchMethod(l) ((l)->match)
 

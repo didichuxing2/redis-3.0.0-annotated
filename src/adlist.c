@@ -84,6 +84,7 @@ list *listAddNodeHead(list *list, void *value)
     if ((node = zmalloc(sizeof(*node))) == NULL)
         return NULL;
     node->value = value;
+	// 这里用unlikely是不是有点效果?
     if (list->len == 0) {
         list->head = list->tail = node;
         node->prev = node->next = NULL;
@@ -123,6 +124,7 @@ list *listAddNodeTail(list *list, void *value)
     return list;
 }
 
+// 在指定链表节点的"附近"插入新值
 list *listInsertNode(list *list, listNode *old_node, void *value, int after) {
     listNode *node;
 
@@ -194,6 +196,7 @@ void listReleaseIterator(listIter *iter) {
 }
 
 /* Create an iterator in the list private iterator structure */
+// reset iterator, 但是不能确定 li 原来是 list 的迭代器
 void listRewind(list *list, listIter *li) {
     li->next = list->head;
     li->direction = AL_START_HEAD;
