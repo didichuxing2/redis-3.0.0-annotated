@@ -798,6 +798,7 @@ struct redisServer {
     } inst_metric[REDIS_METRIC_COUNT];
     /* Configuration */
     int verbosity;                  /* Loglevel in redis.conf */
+	// timeout <N>
     int maxidletime;                /* Client timeout in seconds */
     int tcpkeepalive;               /* Set SO_KEEPALIVE if non-zero. */
     int active_expire_enabled;      /* Can be disabled for testing purposes. */

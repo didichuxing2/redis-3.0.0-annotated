@@ -66,6 +66,9 @@ int yesnotoi(char *s) {
     else return -1;
 }
 
+// 追加配置项
+// save 900 1
+// save the DB on the disk
 void appendServerSaveParams(time_t seconds, int changes) {
     server.saveparams = zrealloc(server.saveparams,sizeof(struct saveparam)*(server.saveparamslen+1));
     server.saveparams[server.saveparamslen].seconds = seconds;
@@ -73,6 +76,7 @@ void appendServerSaveParams(time_t seconds, int changes) {
     server.saveparamslen++;
 }
 
+// 清空
 void resetServerSaveParams(void) {
     zfree(server.saveparams);
     server.saveparams = NULL;
@@ -80,6 +84,7 @@ void resetServerSaveParams(void) {
 }
 
 // 从配置文件更新配置.
+// 已经全部读入, config传递的是字符串
 void loadServerConfigFromString(char *config) {
     char *err = NULL;
     int linenum = 0, totlines, i;
@@ -88,6 +93,7 @@ void loadServerConfigFromString(char *config) {
 
     lines = sdssplitlen(config,strlen(config),"\n",1,&totlines);
 
+	// 单行循环处理, 没有行间依赖关系
     for (i = 0; i < totlines; i++) {
         sds *argv;
         int argc;
@@ -96,6 +102,7 @@ void loadServerConfigFromString(char *config) {
         lines[i] = sdstrim(lines[i]," \t\r\n");
 
         /* Skip comments and blank lines */
+		// # 可以是 trim 后的第一个字符
         if (lines[i][0] == '#' || lines[i][0] == '\0') continue;
 
         /* Split into arguments */
@@ -160,7 +167,7 @@ void loadServerConfigFromString(char *config) {
                 appendServerSaveParams(seconds,changes);
             } else if (argc == 2 && !strcasecmp(argv[1],"")) {
                 resetServerSaveParams();
-            }
+            } // 其他参数情况会被忽略掉
         } else if (!strcasecmp(argv[0],"dir") && argc == 2) {
             if (chdir(argv[1]) == -1) {
                 redisLog(REDIS_WARNING,"Can't chdir to '%s': %s",
@@ -181,6 +188,7 @@ void loadServerConfigFromString(char *config) {
 
             zfree(server.logfile);
             server.logfile = zstrdup(argv[1]);
+			// 指定文件则尝试打开关闭
             if (server.logfile[0] != '\0') {
                 /* Test if we are able to open the file. The server will not
                  * be able to abort just for this problem later... */
@@ -209,17 +217,21 @@ void loadServerConfigFromString(char *config) {
                 }
             }
 
+			// 这个数组以NULL结尾
             if (!validSyslogFacilities[i].name) {
                 err = "Invalid log facility. Must be one of USER or between LOCAL0-LOCAL7";
                 goto loaderr;
             }
+		// 最多支持多少个db
         } else if (!strcasecmp(argv[0],"databases") && argc == 2) {
             server.dbnum = atoi(argv[1]);
             if (server.dbnum < 1) {
                 err = "Invalid number of databases"; goto loaderr;
             }
+		// 支持include指令
         } else if (!strcasecmp(argv[0],"include") && argc == 2) {
             loadServerConfig(argv[1],NULL);
+		// 这个选线是有默认值的, 那么问题来了: 默认值都是在那里设置的?
         } else if (!strcasecmp(argv[0],"maxclients") && argc == 2) {
             server.maxclients = atoi(argv[1]);
             if (server.maxclients < 1) {
@@ -228,6 +240,8 @@ void loadServerConfigFromString(char *config) {
         } else if (!strcasecmp(argv[0],"maxmemory") && argc == 2) {
             server.maxmemory = memtoll(argv[1],NULL);
         } else if (!strcasecmp(argv[0],"maxmemory-policy") && argc == 2) {
+			// volatile 只对设置了expire的键替换
+			// allkeys 对所有的键替换
             if (!strcasecmp(argv[1],"volatile-lru")) {
                 server.maxmemory_policy = REDIS_MAXMEMORY_VOLATILE_LRU;
             } else if (!strcasecmp(argv[1],"volatile-random")) {
@@ -244,6 +258,8 @@ void loadServerConfigFromString(char *config) {
                 err = "Invalid maxmemory policy";
                 goto loaderr;
             }
+		// 嗯.. 这个怎么回事?
+		// 是说随机选这么多个key, 然后进行lru/ttl算法计算.
         } else if (!strcasecmp(argv[0],"maxmemory-samples") && argc == 2) {
             server.maxmemory_samples = atoi(argv[1]);
             if (server.maxmemory_samples <= 0) {
@@ -271,6 +287,7 @@ void loadServerConfigFromString(char *config) {
             if ((server.repl_disable_tcp_nodelay = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+		// 在全同步的情况下, master是把rdb写到文件里然后再传给slave, 还是直接写到slave-socket里.
         } else if (!strcasecmp(argv[0],"repl-diskless-sync") && argc==2) {
             if ((server.repl_diskless_sync = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
@@ -288,6 +305,7 @@ void loadServerConfigFromString(char *config) {
                 goto loaderr;
             }
             resizeReplicationBacklog(size);
+		// 当没有slave的时候, backlog-buf 多久会被释放掉
         } else if (!strcasecmp(argv[0],"repl-backlog-ttl") && argc == 2) {
             server.repl_backlog_time_limit = atoi(argv[1]);
             if (server.repl_backlog_time_limit < 0) {
@@ -308,10 +326,13 @@ void loadServerConfigFromString(char *config) {
             if ((server.rdb_compression = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+		// 关系checksum只是在相同的位置写入 ZERO
         } else if (!strcasecmp(argv[0],"rdbchecksum") && argc == 2) {
             if ((server.rdb_checksum = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+		// main redis hash table
+		// 空闲时自动rehash
         } else if (!strcasecmp(argv[0],"activerehashing") && argc == 2) {
             if ((server.activerehashing = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
@@ -393,6 +414,7 @@ void loadServerConfigFromString(char *config) {
             }
             zfree(server.rdb_filename);
             server.rdb_filename = zstrdup(argv[1]);
+		// 满足这些条件时, hash table 使用 ziplist 作为底层实现
         } else if (!strcasecmp(argv[0],"hash-max-ziplist-entries") && argc == 2) {
             server.hash_max_ziplist_entries = memtoll(argv[1], NULL);
         } else if (!strcasecmp(argv[0],"hash-max-ziplist-value") && argc == 2) {
@@ -440,6 +462,7 @@ void loadServerConfigFromString(char *config) {
         } else if (!strcasecmp(argv[0],"cluster-config-file") && argc == 2) {
             zfree(server.cluster_configfile);
             server.cluster_configfile = zstrdup(argv[1]);
+		// 是否允许部分slot失效
         } else if (!strcasecmp(argv[0],"cluster-require-full-coverage") &&
                     argc == 2)
         {
@@ -573,6 +596,7 @@ loaderr:
  * Both filename and options can be NULL, in such a case are considered
  * empty. This way loadServerConfig can be used to just load a file or
  * just load a string. */
+// 命令行参数通过option传入?
 void loadServerConfig(char *filename, char *options) {
     sds config = sdsempty();
     char buf[REDIS_CONFIGLINE_MAX+1];
@@ -607,6 +631,7 @@ void loadServerConfig(char *filename, char *options) {
  * CONFIG SET implementation
  *----------------------------------------------------------------------------*/
 
+// 这里控制 CONFIG 可以设置哪些参数
 void configSetCommand(redisClient *c) {
     robj *o;
     long long ll;
@@ -1011,6 +1036,8 @@ badfmt: /* Bad format errors */
     } \
 } while(0);
 
+// 这个实现是说不管怎样这些分支都会检测一遍? 然后命令还只支持一次 get 一个?
+// pattern 是支持正则匹配的
 void configGetCommand(redisClient *c) {
     robj *o = c->argv[2];
     void *replylen = addDeferredMultiBulkLength(c);
@@ -1272,7 +1299,9 @@ dictType optionSetDictType = {
 
 /* The config rewrite state. */
 struct rewriteConfigState {
+	// 见 rewriteConfigAddLineNumberToOption()
     dict *option_to_line; /* Option -> list of config file lines map */
+	// 记录处理过的option
     dict *rewritten;      /* Dictionary of already processed options */
     int numlines;         /* Number of lines in current config */
     sds *lines;           /* Current lines as an array of sds strings */
@@ -1281,6 +1310,7 @@ struct rewriteConfigState {
 };
 
 /* Append the new line to the current configuration state. */
+// 每次都重新分配, 可以加个capacity然后需要时double之.
 void rewriteConfigAppendLine(struct rewriteConfigState *state, sds line) {
     state->lines = zrealloc(state->lines, sizeof(char*) * (state->numlines+1));
     state->lines[state->numlines++] = line;
@@ -1304,6 +1334,7 @@ void rewriteConfigAddLineNumberToOption(struct rewriteConfigState *state, sds op
 void rewriteConfigMarkAsProcessed(struct rewriteConfigState *state, char *option) {
     sds opt = sdsnew(option);
 
+	// 这里是 insert 不是 insert & update
     if (dictAdd(state->rewritten,opt,NULL) != DICT_OK) sdsfree(opt);
 }
 
@@ -1385,12 +1416,14 @@ struct rewriteConfigState *rewriteConfigReadOldFile(char *path) {
  *
  * "line" is either used, or freed, so the caller does not need to free it
  * in any way. */
+// 这里的line是一行完整的配置, 包括了option信息
 void rewriteConfigRewriteLine(struct rewriteConfigState *state, char *option, sds line, int force) {
     sds o = sdsnew(option);
     list *l = dictFetchValue(state->option_to_line,o);
 
     rewriteConfigMarkAsProcessed(state,option);
 
+	// 之前使用的默认值, 现在设置的也是默认值
     if (!l && !force) {
         /* Option not used previously, and we are not forced to use it. */
         sdsfree(line);
@@ -1422,6 +1455,7 @@ void rewriteConfigRewriteLine(struct rewriteConfigState *state, char *option, sd
 
 /* Write the long long 'bytes' value as a string in a way that is parsable
  * inside redis.conf. If possible uses the GB, MB, KB notation. */
+// 不能有精度损失, so...
 int rewriteConfigFormatMemory(char *buf, size_t len, long long bytes) {
     int gb = 1024*1024*1024;
     int mb = 1024*1024;
@@ -1499,6 +1533,8 @@ void rewriteConfigOctalOption(struct rewriteConfigState *state, char *option, in
 /* Rewrite an enumeration option, after the "value" every enum/value pair
  * is specified, terminated by NULL. After NULL the default value is
  * specified. See how the function is used for more information. */
+// 假设 value 重视可以在enum里命中的.
+// default 只是用来是否标记强制写入.
 void rewriteConfigEnumOption(struct rewriteConfigState *state, char *option, int value, ...) {
     va_list ap;
     char *enum_name, *matching_name = NULL;
@@ -1516,6 +1552,7 @@ void rewriteConfigEnumOption(struct rewriteConfigState *state, char *option, int
         if (value == enum_val) matching_name = enum_name;
     }
     va_end(ap);
+	redisAssert(matching_name != NULL);
 
     force = value != def_val;
     line = sdscatprintf(sdsempty(),"%s %s",option,matching_name);
@@ -1547,9 +1584,11 @@ void rewriteConfigSaveOption(struct rewriteConfigState *state) {
     /* Note that if there are no save parameters at all, all the current
      * config line with "save" will be detected as orphaned and deleted,
      * resulting into no RDB persistence as expected. */
+	// 这段话的意思是?
     for (j = 0; j < server.saveparamslen; j++) {
         line = sdscatprintf(sdsempty(),"save %ld %d",
             (long) server.saveparams[j].seconds, server.saveparams[j].changes);
+		// force = 1
         rewriteConfigRewriteLine(state,"save",line,1);
     }
     /* Mark "save" as processed in case server.saveparamslen is zero. */
@@ -1656,6 +1695,7 @@ sds rewriteConfigGetContentFromState(struct rewriteConfigState *state) {
     for (j = 0; j < state->numlines; j++) {
         /* Every cluster of empty lines is turned into a single empty line. */
         if (sdslen(state->lines[j]) == 0) {
+			// 多个空行可以合并
             if (was_empty) continue;
             was_empty = 1;
         } else {
@@ -1693,11 +1733,13 @@ void rewriteConfigRemoveOrphaned(struct rewriteConfigState *state) {
 
         /* Don't blank lines about options the rewrite process
          * don't understand. */
+		// 放入了不知道是啥的指令, 原样保留
         if (dictFind(state->rewritten,option) == NULL) {
             redisLog(REDIS_DEBUG,"Not rewritten option: %s", option);
             continue;
         }
 
+		// 处理过的指令且有"残余"的以空行替代
         while(listLength(l)) {
             listNode *ln = listFirst(l);
             int linenum = (long) ln->value;
@@ -1722,6 +1764,7 @@ void rewriteConfigRemoveOrphaned(struct rewriteConfigState *state) {
  *
  * The function returns 0 on success, otherwise -1 is returned and errno
  * set accordingly. */
+// why? 为什么这么处理?
 int rewriteConfigOverwriteFile(char *configfile, sds content) {
     int retval = 0;
     int fd = open(configfile,O_RDWR|O_CREAT,0644);

@@ -396,6 +396,7 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
     while(1) {
         buf[buflen-2] = '\0';
         va_copy(cpy,ap);
+		// 总是会在 buf[buelen-1] 的位置写入\0
         vsnprintf(buf, buflen, fmt, cpy);
         va_end(cpy);
 		// vsnprintf() write at most buflen bytes, including the terminating null byte.
@@ -481,6 +482,7 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
 
         switch(*f) {
         case '%':
+			// 如果以%符号结尾那不就跪了.
             next = *(f+1);
             f++;
             switch(next) {
@@ -536,6 +538,7 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
                 }
                 break;
             default: /* Handle %% and generally %<unknown>. */
+				// 仅仅是把<unknown>写入
                 s[i++] = next;
                 sh->len += 1;
                 sh->free -= 1;
@@ -580,6 +583,7 @@ sds sdstrim(sds s, const char *cset) {
     ep = end = s+sdslen(s)-1;
     while(sp <= end && strchr(cset, *sp)) sp++;
     while(ep > start && strchr(cset, *ep)) ep--;
+	// [sp, ep]
     len = (sp > ep) ? 0 : ((ep-sp)+1);
     if (sh->buf != sp) memmove(sh->buf, sp, len);
     sh->buf[len] = '\0';
@@ -690,6 +694,7 @@ int sdscmp(const sds s1, const sds s2) {
 // 包含可能的空串:
 // a-b-
 // => a, b, ""
+// 注意返回值需要显式释放. 释放函数: sdsfreesplitres()
 sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count) {
     int elements = 0, slots = 5, start = 0, j;
     sds *tokens;
@@ -719,6 +724,7 @@ sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count
             if (tokens[elements] == NULL) goto cleanup;
             elements++;
             start = j+seplen;
+			// for循环还有一次++
             j = j+seplen-1; /* skip the separator */
         }
     }
@@ -829,7 +835,7 @@ int hex_digit_to_int(char c) {
  * quotes or closed quotes followed by non space characters
  * as in: "foo"bar or "foo'
  */
-// todo.
+// 这个sds & char* 混用真是蛋疼.
 sds *sdssplitargs(const char *line, int *argc) {
     const char *p = line;
     char *current = NULL;

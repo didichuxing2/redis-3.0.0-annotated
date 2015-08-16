@@ -33,6 +33,8 @@
 
 typedef struct aeApiState {
     int epfd;
+	// epoll_event array[aeEventLoop::setsize]
+	// 这个是用来保存触发的事件的
     struct epoll_event *events;
 } aeApiState;
 
@@ -45,6 +47,7 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
         zfree(state);
         return -1;
     }
+	// 1024 is ignored sinze 2.6.8
     state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */
     if (state->epfd == -1) {
         zfree(state->events);
@@ -79,6 +82,7 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
             EPOLL_CTL_ADD : EPOLL_CTL_MOD;
 
     ee.events = 0;
+	// 就是说有些删除逻辑要负责reset字段的
     mask |= eventLoop->events[fd].mask; /* Merge old events */
     if (mask & AE_READABLE) ee.events |= EPOLLIN;
     if (mask & AE_WRITABLE) ee.events |= EPOLLOUT;
@@ -129,6 +133,9 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             eventLoop->fired[j].mask = mask;
         }
     }
+	// 这个分支就忽略了?
+	// else { // retval < 0
+	//	}
     return numevents;
 }
 

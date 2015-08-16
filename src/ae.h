@@ -61,6 +61,8 @@ typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 /* File event structure */
 typedef struct aeFileEvent {
     int mask; /* one of AE_(READABLE|WRITABLE) */
+	// 这两个字段不可能同时设置(?)
+	// 看接口
     aeFileProc *rfileProc;
     aeFileProc *wfileProc;
     void *clientData;
@@ -69,15 +71,18 @@ typedef struct aeFileEvent {
 /* Time event structure */
 typedef struct aeTimeEvent {
     long long id; /* time event identifier. */
+	// 这是绝对时间? 然后是否重复怎么控制?
     long when_sec; /* seconds */
     long when_ms; /* milliseconds */
     aeTimeProc *timeProc;
+	// 析构, 事件删除时进行清理工作.
     aeEventFinalizerProc *finalizerProc;
     void *clientData;
     struct aeTimeEvent *next;
 } aeTimeEvent;
 
 /* A fired event */
+// 这是?
 typedef struct aeFiredEvent {
     int fd;
     int mask;
@@ -85,14 +90,29 @@ typedef struct aeFiredEvent {
 
 /* State of an event based program */
 typedef struct aeEventLoop {
+	// 只升不降?
+	// 可以降的, 见 ae.c, aeDeleteFileEvent() 实现
+	// 但是复杂度为O(n)的, 比较低.
+	// 可以避免? maxfd什么场合下使用?
     int maxfd;   /* highest file descriptor currently registered */
+	// max?? 还是current?
     int setsize; /* max number of file descriptors tracked */
+	// timeEvent按照触发时间有排序? 这里记录下一个?
+	// 不是的, 每个时间时间有一个唯一ID, 这是用来自增的
     long long timeEventNextId;
     time_t lastTime;     /* Used to detect system clock skew */
+	// 这两个数组是按照 fd-value 直接索引的???
+	// 见 ae.c, aeResizeSetSize()
+	// aeFileEvent array[setsize]
     aeFileEvent *events; /* Registered events */
+	// aeFiredEvent array[setsize]
     aeFiredEvent *fired; /* Fired events */
+	// list
+	// 每个新事件都在链表头部插入
     aeTimeEvent *timeEventHead;
+	// 
     int stop;
+	// 有不同的事件分离程序, 每个需要维护的数据不同, 保存在下面这个void*里
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
 } aeEventLoop;

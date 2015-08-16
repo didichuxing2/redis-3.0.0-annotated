@@ -48,6 +48,8 @@
 
 #include "anet.h"
 
+// (错误)字符串格式化函数
+// 参数列表没带长度, 隐含的256字节长
 static void anetSetError(char *err, const char *fmt, ...)
 {
     va_list ap;
@@ -58,6 +60,7 @@ static void anetSetError(char *err, const char *fmt, ...)
     va_end(ap);
 }
 
+// 这个接口设计??
 int anetSetBlock(char *err, int fd, int non_block) {
     int flags;
 
@@ -92,6 +95,7 @@ int anetBlock(char *err, int fd) {
 /* Set TCP keep alive option to detect dead peers. The interval option
  * is only used for Linux as we are using Linux-specific APIs to set
  * the probe send time, interval, and count. */
+// 只有 linux 才能设置 interval 周期(?)
 int anetKeepAlive(char *err, int fd, int interval)
 {
     int val = 1;
@@ -402,6 +406,7 @@ int anetRead(int fd, char *buf, int count)
     return totlen;
 }
 
+// yeah! 又可以 Pull Request 了
 /* Like write(2) but make sure 'count' is read before to return
  * (unless error is encountered) */
 int anetWrite(int fd, char *buf, int count)
@@ -507,6 +512,7 @@ int anetUnixServer(char *err, char *path, mode_t perm, int backlog)
     return s;
 }
 
+// block
 static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *len) {
     int fd;
     while(1) {

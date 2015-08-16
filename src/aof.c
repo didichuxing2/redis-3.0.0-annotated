@@ -58,6 +58,7 @@ void aofClosePipes(void);
 
 #define AOF_RW_BUF_BLOCK_SIZE (1024*1024*10)    /* 10 MB per block */
 
+// 保存在 listNode::value 字段
 typedef struct aofrwblock {
     unsigned long used, free;
     char buf[AOF_RW_BUF_BLOCK_SIZE];
@@ -75,6 +76,7 @@ void aofRewriteBufferReset(void) {
 }
 
 /* Return the current size of the AOF rewrite buffer. */
+// 遍历 list 然后累加
 unsigned long aofRewriteBufferSize(void) {
     listNode *ln;
     listIter li;
@@ -91,6 +93,7 @@ unsigned long aofRewriteBufferSize(void) {
 /* Event handler used to send data to the child process doing the AOF
  * rewrite. We send pieces of our AOF differences buffer so that the final
  * write when the child finishes the rewrite will be small. */
+// event handler ~ aeFileProc, 为什么不是 aeTimeProc ?
 void aofChildWriteDiffData(aeEventLoop *el, int fd, void *privdata, int mask) {
     listNode *ln;
     aofrwblock *block;
@@ -111,6 +114,7 @@ void aofChildWriteDiffData(aeEventLoop *el, int fd, void *privdata, int mask) {
         if (block->used > 0) {
             nwritten = write(server.aof_pipe_write_data_to_child,
                              block->buf,block->used);
+			// nwritten < 0 那就是 fd 出错了, 没有额外的区分处理啊...
             if (nwritten <= 0) return;
             memmove(block->buf,block->buf+nwritten,block->used-nwritten);
             block->used -= nwritten;
@@ -124,6 +128,7 @@ void aofRewriteBufferAppend(unsigned char *s, unsigned long len) {
     listNode *ln = listLast(server.aof_rewrite_buf_blocks);
     aofrwblock *block = ln ? ln->value : NULL;
 
+	// 同一条指令可能会被记录到不同的block里
     while(len) {
         /* If we already got at least an allocated block, try appending
          * at least some piece into it. */
@@ -138,6 +143,7 @@ void aofRewriteBufferAppend(unsigned char *s, unsigned long len) {
             }
         }
 
+		// 需要首次分配block, 或指令被分隔到不同的block里存储.
         if (len) { /* First block to allocate, or need another block. */
             int numblocks;
 
@@ -148,6 +154,8 @@ void aofRewriteBufferAppend(unsigned char *s, unsigned long len) {
 
             /* Log every time we cross more 10 or 100 blocks, respectively
              * as a notice or warning. */
+			// 只是在 9/99/999 的时候打印
+			// 不需要加1的, 因为之前插入了一个节点, 不会出现 len==0 的情况.
             numblocks = listLength(server.aof_rewrite_buf_blocks);
             if (((numblocks+1) % 10) == 0) {
                 int level = ((numblocks+1) % 100) == 0 ? REDIS_WARNING :
@@ -160,6 +168,7 @@ void aofRewriteBufferAppend(unsigned char *s, unsigned long len) {
 
     /* Install a file event to send data to the rewrite child if there is
      * not one already. */
+	// writable 应该一直可以吧
     if (aeGetFileEvents(server.el,server.aof_pipe_write_data_to_child) == 0) {
         aeCreateFileEvent(server.el, server.aof_pipe_write_data_to_child,
             AE_WRITABLE, aofChildWriteDiffData, NULL);
