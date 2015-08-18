@@ -44,11 +44,14 @@
 #include "sha1.h"
 
 /* Glob-style pattern matching. */
+// * ? [ ]
 int stringmatchlen(const char *pattern, int patternLen,
         const char *string, int stringLen, int nocase)
 {
     while(patternLen) {
         switch(pattern[0]) {
+		// if p[i] == *
+		// 		then recursive cmp(p[i+1:], s[j:]) for j >= 0 and j < slen
         case '*':
             while (pattern[1] == '*') {
                 pattern++;
@@ -99,6 +102,7 @@ int stringmatchlen(const char *pattern, int patternLen,
                     int start = pattern[0];
                     int end = pattern[2];
                     int c = string[0];
+					// 可以上限在前 [end, begin]
                     if (start > end) {
                         int t = start;
                         start = end;
@@ -177,6 +181,7 @@ int stringmatch(const char *pattern, const char *string, int nocase) {
  * On parsing error, if *err is not NULL, it's set to 1, otherwise it's
  * set to 0. On error the function return value is 0, regardless of the
  * fact 'err' is NULL or not. */
+// p 应该是trim过的
 long long memtoll(const char *p, int *err) {
     const char *u;
     char buf[128];
@@ -222,6 +227,7 @@ long long memtoll(const char *p, int *err) {
     char *endptr;
     errno = 0;
     val = strtoll(buf,&endptr,10);
+	// *endptr != '\0' 是没有必要的.
     if ((val == 0 && errno == EINVAL) || *endptr != '\0') {
         if (err) *err = 1;
         return 0;
@@ -235,6 +241,7 @@ uint32_t digits10(uint64_t v) {
     if (v < 10) return 1;
     if (v < 100) return 2;
     if (v < 1000) return 3;
+	// 为什么要这么写?
     if (v < 1000000000000UL) {
         if (v < 100000000UL) {
             if (v < 1000000) {
@@ -354,6 +361,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
         return 0;
     }
 
+	// 溢出检测
     while (plen < slen && p[0] >= '0' && p[0] <= '9') {
         if (v > (ULLONG_MAX / 10)) /* Overflow. */
             return 0;
@@ -371,6 +379,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
         return 0;
 
     if (negative) {
+		// -(LLONG_MIN+1) 难道不就是 LLONG_MAX ???
         if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
             return 0;
         if (value != NULL) *value = -v;
@@ -410,6 +419,7 @@ int d2string(char *buf, size_t len, double value) {
             len = snprintf(buf,len,"inf");
     } else if (value == 0) {
         /* See: http://en.wikipedia.org/wiki/Signed_zero, "Comparisons". */
+		// 这个分支是??? 除0???
         if (1.0/value < 0)
             len = snprintf(buf,len,"-0");
         else
@@ -521,6 +531,7 @@ void getRandomHexChars(char *p, unsigned int len) {
  * The function does not try to normalize everything, but only the obvious
  * case of one or more "../" appearning at the start of "filename"
  * relative path. */
+// 中间的..不会处理, 如果以./开头也不会处理
 sds getAbsolutePath(char *filename) {
     char cwd[1024];
     sds abspath;
