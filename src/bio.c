@@ -23,6 +23,7 @@
  * Jobs of the same type are guaranteed to be processed from the least
  * recently inserted to the most recently inserted (older jobs processed
  * first).
+ *      FIFO
  *
  * Currently there is no way for the creator of the job to be notified about
  * the completion of the operation, this will only be added when/if needed.
@@ -61,6 +62,9 @@
 #include "redis.h"
 #include "bio.h"
 
+// 有多少种操作, 就有多少组线程.
+// 每个操作对应: 一个线程, 一把互斥锁, 一个条件变量, 一个任务队列, 一个队列计数(?)
+
 static pthread_t bio_threads[REDIS_BIO_NUM_OPS];
 static pthread_mutex_t bio_mutex[REDIS_BIO_NUM_OPS];
 static pthread_cond_t bio_condvar[REDIS_BIO_NUM_OPS];
@@ -71,6 +75,8 @@ static list *bio_jobs[REDIS_BIO_NUM_OPS];
  * objects shared with the background thread. The main thread will just wait
  * that there are no longer jobs of this type to be executed before performing
  * the sensible operation. This data is also useful for reporting. */
+// job使用list保存, list本身带一个len字段, 为何还需要这个数组?
+// 根据实现这两个值也是同时加锁后修改的.
 static unsigned long long bio_pending[REDIS_BIO_NUM_OPS];
 
 /* This structure represents a background Job. It is only used locally to this
@@ -79,6 +85,7 @@ struct bio_job {
     time_t time; /* Time at which the job was created. */
     /* Job specific arguments pointers. If we need to pass more than three
      * arguments we can just pass a pointer to a structure or alike. */
+    // 既然如此为何不设置一个参数指针?
     void *arg1, *arg2, *arg3;
 };
 
@@ -107,6 +114,7 @@ void bioInit(void) {
     pthread_attr_init(&attr);
     pthread_attr_getstacksize(&attr,&stacksize);
     if (!stacksize) stacksize = 1; /* The world is full of Solaris Fixes */
+    // 栈大小为何只能是初始值的 2的幂次方倍?
     while (stacksize < REDIS_THREAD_STACK_SIZE) stacksize *= 2;
     pthread_attr_setstacksize(&attr, stacksize);
 
