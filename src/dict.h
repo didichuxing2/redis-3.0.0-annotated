@@ -81,12 +81,14 @@ typedef struct dictht {
 // private看dictType的函数指针声明.
 typedef struct dict {
     dictType *type;
+    // privData 可以怎么用呢?
     void *privdata;
 	// 这里是两个元素的数组，不是指针数组，所以肯定总是有效的。
 	// 然后rehash结束的时候会reset成为一个空的。
     dictht ht[2];
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
 	// 这个字段什么用, 为何要计数?
+    // 对safe iterator进行计数.
     int iterators; /* number of iterators currently running */
 } dict;
 
@@ -94,10 +96,15 @@ typedef struct dict {
  * dictAdd, dictFind, and other functions against the dictionary even while
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
+// safe iterator 可以在迭代过程中修改dict
+// unsafe iterator 则不可以修改.
 typedef struct dictIterator {
     dict *d;
     long index;
     int table, safe;
+    // entry & nextEntry 怎么用?
+    // entry保存当前元素, next保存下一个.
+    // 如果迭代curr的时候在next之前插入了新元素,则不会被迭代到(即使在curr/entry之后)
     dictEntry *entry, *nextEntry;
     /* unsafe iterator fingerprint for misuse detection. */
     long long fingerprint;
@@ -162,10 +169,16 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 /* API */
 dict *dictCreate(dictType *type, void *privDataPtr);
 int dictExpand(dict *d, unsigned long size);
+// 不能有重复, 否则失败
 int dictAdd(dict *d, void *key, void *val);
+// 添加一个 key => NULL ??
 dictEntry *dictAddRaw(dict *d, void *key);
+// update or add
+// 如果提供的destructor, 则会析构释放.
 int dictReplace(dict *d, void *key, void *val);
+// 如果存在则返回 the pointer of entry, 否则添加 key => NULL
 dictEntry *dictReplaceRaw(dict *d, void *key);
+// 不存在返回DICT_ERR
 int dictDelete(dict *d, const void *key);
 int dictDeleteNoFree(dict *d, const void *key);
 void dictRelease(dict *d);

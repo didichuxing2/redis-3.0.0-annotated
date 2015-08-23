@@ -55,12 +55,15 @@ struct _rio {
     uint64_t cksum;
 
     /* number of bytes read or written */
+    // 记录处理过的字节数
     size_t processed_bytes;
 
     /* maximum single read or write chunk size */
+    // 内部实现里的一次读写的块最大尺寸.
     size_t max_processing_chunk;
 
     /* Backend-specific vars. */
+    // 三种结构怎么选择用哪一个呢?
     union {
         /* In-memory buffer target. */
         struct {
@@ -70,6 +73,7 @@ struct _rio {
         /* Stdio file pointer target. */
         struct {
             FILE *fp;
+            // 见 rioFileWrite() impl.
             off_t buffered; /* Bytes written since last fsync. */
             off_t autosync; /* fsync after 'autosync' bytes written. */
         } file;
@@ -89,10 +93,14 @@ typedef struct _rio rio;
 /* The following functions are our interface with the stream. They'll call the
  * actual implementation of read / write / tell, and will update the checksum
  * if needed. */
-
+// rio对象, 一旦失败就不能再使用了(?)
 static inline size_t rioWrite(rio *r, const void *buf, size_t len) {
     while (len) {
-        size_t bytes_to_write = (r->max_processing_chunk && r->max_processing_chunk < len) ? r->max_processing_chunk : len;
+        size_t bytes_to_write = 
+            (r->max_processing_chunk && r->max_processing_chunk < len) 
+                ? r->max_processing_chunk 
+                    : len;
+
         if (r->update_cksum) r->update_cksum(r,buf,bytes_to_write);
         if (r->write(r,buf,bytes_to_write) == 0)
             return 0;
@@ -105,7 +113,11 @@ static inline size_t rioWrite(rio *r, const void *buf, size_t len) {
 
 static inline size_t rioRead(rio *r, void *buf, size_t len) {
     while (len) {
-        size_t bytes_to_read = (r->max_processing_chunk && r->max_processing_chunk < len) ? r->max_processing_chunk : len;
+        size_t bytes_to_read = 
+            (r->max_processing_chunk && r->max_processing_chunk < len) 
+                ? r->max_processing_chunk 
+                    : len;
+
         if (r->read(r,buf,bytes_to_read) == 0)
             return 0;
         if (r->update_cksum) r->update_cksum(r,buf,bytes_to_read);

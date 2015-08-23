@@ -51,6 +51,7 @@
 #define _XOPEN_SOURCE
 #endif
 
+http://bbs.chinaunix.net/thread-3778770-1-1.html
 #if defined(__sun)
 #define _POSIX_C_SOURCE 199506L
 #endif

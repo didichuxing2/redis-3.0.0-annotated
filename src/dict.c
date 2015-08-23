@@ -210,6 +210,7 @@ int dictResize(dict *d)
 }
 
 /* Expand or create the hash table */
+// 注意这里怎么判断初始化ht数组的哪一个元素的.
 int dictExpand(dict *d, unsigned long size)
 {
     dictht n; /* the new hash table */
@@ -238,6 +239,7 @@ int dictExpand(dict *d, unsigned long size)
 
     /* Prepare a second hash table for incremental rehashing */
 	// 是不是总是rehash到1，rehash结束时swap(0,1); reset(1)??
+    // yes
     d->ht[1] = n;
     d->rehashidx = 0;
     return DICT_OK;
@@ -270,6 +272,8 @@ int dictRehash(dict *d, int n) {
         }
         de = d->ht[0].table[d->rehashidx];
         /* Move all the keys in this bucket from the old to the new hash HT */
+        // item = old.popFromHead()
+        // new.pushToHead(item)
         while(de) {
             unsigned int h;
 
@@ -307,7 +311,7 @@ long long timeInMilliseconds(void) {
 }
 
 /* Rehash for an amount of time between ms milliseconds and ms+1 milliseconds */
-// rehash多长时间，每次100个，只要时间不超过。
+// 在ms时间长度内, 每次100个bucket进行rehash,直到超时.
 int dictRehashMilliseconds(dict *d, int ms) {
     long long start = timeInMilliseconds();
     int rehashes = 0;
@@ -598,6 +602,8 @@ dictIterator *dictGetSafeIterator(dict *d) {
     return i;
 }
 
+// dictGetXXXIterator()返回的是一个"未初始化"的迭代器，
+// 首次调用dictNext进行初始化并返回当前元素.
 dictEntry *dictNext(dictIterator *iter)
 {
     while (1) {
@@ -641,12 +647,15 @@ void dictReleaseIterator(dictIterator *iter)
         else
             assert(iter->fingerprint == dictFingerprint(iter->d));
 		// 这里有assert判断。
+        // 仅仅是debug时候使用??
     }
     zfree(iter);
 }
 
 /* Return a random entry from the hash table. Useful to
  * implement randomized algorithms */
+// 先随机一个非空bucket, 然后在这个bucket在随机一个元素.
+// 复杂度是不确定的
 dictEntry *dictGetRandomKey(dict *d)
 {
     dictEntry *he, *orighe;
@@ -660,6 +669,9 @@ dictEntry *dictGetRandomKey(dict *d)
         do {
             /* We are sure there are no elements in indexes from 0
              * to rehashidx-1 */
+            // 整个区间分三段:
+            //  ht0[0:rehashidx], ht0[rehashidx:ht0.size], ht1[0:ht1.size]
+            // 在后两段空间内随机一个非空bucket.
             h = d->rehashidx + (random() % (d->ht[0].size +
                                             d->ht[1].size -
                                             d->rehashidx));
@@ -713,6 +725,14 @@ dictEntry *dictGetRandomKey(dict *d)
  * statistics. However the function is much faster than dictGetRandomKey()
  * at producing N elements. */
 // 这里的随机会选取整个桶里的元素。
+// 不保证返回count个元素, 不保证返回的元素不重复.
+// 返回值get到的元素个数.
+// 这里返回的item range实际上是在dict的内部实现顺序上顺序取count个元素:
+//      随机一个bucket-idx, 然后遍历该bucket复制到des,然后取下一个bucket:idx+1.
+// 其中有一些"修正":
+//  比如连续5个bucket都是空,则再随机取一次idx;
+//  取bucket-idx元素的时候, ht[0:1]都会取;
+//  dict进行shrink的时候, idx取值需要注意.
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
     unsigned int j; /* internal hash table id, 0 or 1. */
     unsigned int tables; /* 1 or 2 tables? */
@@ -805,6 +825,7 @@ static unsigned long rev(unsigned long v) {
  * The function guarantees all elements present in the
  * dictionary get returned between the start and end of the iteration.
  * However it is possible some elements get returned multiple times.
+ *  [start, end] 这个时间区间内一直存在的元素
  *
  * For every element returned, the callback argument 'fn' is
  * called with 'privdata' as first argument and the dictionary entry
@@ -846,12 +867,15 @@ static unsigned long rev(unsigned long v) {
  * cursor does not need to restart if the table size gets bigger. It will
  * continue iterating using cursors without '1100' at the end, and also
  * without any other combination of the final 4 bits already explored.
+ *  使用该算法, 在变大时, 可以保证不会遍历重复的bucket.
+ *      如果原来遍历过bucket[1100], table-size*2以后, bucket[0 1100] & bucket[1 1100]都不会再遍历了.
  *
  * Similarly when the table size shrinks over time, for example going from
  * 16 to 8, if a combination of the lower three bits (the mask for size 8
  * is 111) were already completely explored, it would not be visited again
  * because we are sure we tried, for example, both 0111 and 1111 (all the
  * variations of the higher bit) so we don't need to test it again.
+ *  变小时, "完全"遍历过的组合也不会再遍历了, "遍历中"的组合会从头遍历.
  *
  * WAIT... YOU HAVE *TWO* TABLES DURING REHASHING!
  *
@@ -877,6 +901,8 @@ static unsigned long rev(unsigned long v) {
  * 3) The reverse cursor is somewhat hard to understand at first, but this
  *    comment is supposed to help.
  */
+// t0指向较小的ht
+// 返回的元素个数是以bucket为粒度的.
 unsigned long dictScan(dict *d,
                        unsigned long v,
                        dictScanFunction *fn,
@@ -931,6 +957,7 @@ unsigned long dictScan(dict *d,
             }
 
             /* Increment bits not covered by the smaller mask */
+            // 从低位开始加
             v = (((v | m0) + 1) & ~m0) | (v & m0);
 
             /* Continue while bits covered by mask difference is non-zero */
@@ -974,11 +1001,12 @@ static int _dictExpandIfNeeded(dict *d)
 }
 
 /* Our hash table capability is a power of two */
-// 注意size是unsigned long的，跟LONG_SIZE比一下的话while里就不会因为一处产生死循环了。
+// 注意size是unsigned long的，跟LONG_SIZE比一下的话while里就不会因为溢出产生死循环了。
 static unsigned long _dictNextPower(unsigned long size)
 {
     unsigned long i = DICT_HT_INITIAL_SIZE;
 
+    // 嗯..
     if (size >= LONG_MAX) return LONG_MAX;
     while(1) {
         if (i >= size)
@@ -1017,12 +1045,14 @@ static int _dictKeyIndex(dict *d, const void *key)
         }
 		// 因为ht[0] & ht[1]的idx是不一样的，这里和调用方对idx的理解由
 		// dictIsRehashing()函数决定，且维护了内外的一致性。
+        // 如果在rehash, 则一定返回ht[1]的idx
         if (!dictIsRehashing(d)) break;
     }
     return idx;
 }
 
 void dictEmpty(dict *d, void(callback)(void*)) {
+    // Clear函数递归释放k-v空间
     _dictClear(d,&d->ht[0],callback);
     _dictClear(d,&d->ht[1],callback);
     d->rehashidx = -1;

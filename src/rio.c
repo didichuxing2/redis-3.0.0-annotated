@@ -59,12 +59,15 @@
 
 /* Returns 1 or 0 for success/failure. */
 static size_t rioBufferWrite(rio *r, const void *buf, size_t len) {
+    // comments:
+    //      assert(sdslen(ptr) == pos);
     r->io.buffer.ptr = sdscatlen(r->io.buffer.ptr,(char*)buf,len);
     r->io.buffer.pos += len;
     return 1;
 }
 
 /* Returns 1 or 0 for success/failure. */
+// 那么用户在读取的时候怎么知道还剩下多少数据然后一次性读取出来?
 static size_t rioBufferRead(rio *r, void *buf, size_t len) {
     if (sdslen(r->io.buffer.ptr)-r->io.buffer.pos < len)
         return 0; /* not enough buffer to return len bytes. */
@@ -97,6 +100,9 @@ static const rio rioBufferIO = {
     { { NULL, 0 } } /* union for io-specific vars */
 };
 
+// 看起来不是全双工的, 然后是用于读(add io wrapper for string buffer)
+//      还是用于写(write to string buffer by io wrapper)
+//      是由用户自行决定然后传入合适的参数.
 void rioInitWithBuffer(rio *r, sds s) {
     *r = rioBufferIO;
     r->io.buffer.ptr = s;
@@ -166,6 +172,7 @@ void rioInitWithFile(rio *r, FILE *fp) {
  * When buf is NULL adn len is 0, the function performs a flush operation
  * if there is some pending buffer, so this function is also used in order
  * to implement rioFdsetFlush(). */
+// 这些变为error状态的fd怎么办?
 static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
     ssize_t retval;
     int j;

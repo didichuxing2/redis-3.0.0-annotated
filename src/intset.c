@@ -53,6 +53,7 @@ static uint8_t _intsetValueEncoding(int64_t v) {
 
 /* Return the value at pos, given an encoding. */
 // encoding是有intset关联的, 这里为何选择作为参数传入, 而不直接读取intset的字段值.
+// 按照enc解释is->contents数组的值, 并读取指定偏移处的值.
 static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     int64_t v64;
     int32_t v32;
@@ -104,7 +105,7 @@ intset *intsetNew(void) {
 }
 
 /* Resize the intset */
-// size-fixed, why?
+// 这里会导致is指针失效.
 static intset *intsetResize(intset *is, uint32_t len) {
     uint32_t size = len*intrev32ifbe(is->encoding);
     is = zrealloc(is,sizeof(intset)+size);
@@ -115,6 +116,8 @@ static intset *intsetResize(intset *is, uint32_t len) {
  * sets "pos" to the position of the value within the intset. Return 0 when
  * the value is not present in the intset and sets "pos" to the position
  * where "value" can be inserted. */
+// 在闭区间 [begin, end] 上查找
+// 注意pos是元素的idx
 static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
     int64_t cur = -1;
@@ -161,6 +164,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 }
 
 /* Upgrades the intset to a larger encoding and inserts the given integer. */
+// 该函数专门用来处理需要upgrade情况下的插入行为.
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
     uint8_t newenc = _intsetValueEncoding(value);
@@ -177,6 +181,7 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     /* Upgrade back-to-front so we don't overwrite values.
      * Note that the "prepend" variable is used to make sure we have an empty
      * space at either the beginning or the end of the intset. */
+    // 如果是downgrade, 则需要从头开始.
     while(length--)
         _intsetSet(is,length+prepend,_intsetGetEncoded(is,length,curenc));
 
@@ -189,6 +194,8 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     return is;
 }
 
+// from & to 元素idx的偏移量, 所以需要按照enc乘上不同的值.
+// memmove()可以避免overlay问题的, 因此这个函数也可以处理 前向 & 后向 移动.
 static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     void *src, *dst;
     uint32_t bytes = intrev32ifbe(is->length)-from;
@@ -235,6 +242,7 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 
+    // 这个if-else逻辑太扯淡了, 不能把if-else拆开, 或则把这段代码放到else里?
     _intsetSet(is,pos,value);
     is->length = intrev32ifbe(intrev32ifbe(is->length)+1);
     return is;
@@ -264,6 +272,7 @@ intset *intsetRemove(intset *is, int64_t value, int *success) {
 }
 
 /* Determine whether a value belongs to this set */
+// 仅仅是用来判断元素是否存在, 这个名字不好.
 uint8_t intsetFind(intset *is, int64_t value) {
     uint8_t valenc = _intsetValueEncoding(value);
     return valenc <= intrev32ifbe(is->encoding) && intsetSearch(is,value,NULL);
@@ -367,6 +376,7 @@ int main(int argc, char **argv) {
     int i;
     intset *is;
     sranddev();
+    // srand(time(NULL));
 
     printf("Value encodings: "); {
         assert(_intsetValueEncoding(-32768) == INTSET_ENC_INT16);

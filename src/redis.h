@@ -191,16 +191,19 @@ typedef long long mstime_t; /* millisecond time type. */
 //	embstr:	分配sds空间时,直接直接分配redisObject+sdshdr整块空间.
 //		embstr是只读的,如果对该编码对象进行修改,则立刻转换为raw.
 // list
-//	ziplist: 保存的所有字符串小于64字节, 且元素个数小雨512
+//	ziplist: 保存的所有字符串小于64字节, 且元素个数小于512
 //	linkedlist: 
 //	list里保存了整数且可被long型存储, 如何处理? 会有string类型的哪些选择吗?
+//
 // hash
 //	ziplist: 插入的键值对按顺序插入的列表里, k1,v1,k2,v2,k3,v3,...
 //		保存的键值对少于512, 且键和值字符串长度都小于64
 //	hashtable(dict):
+//
 // set
 //	intset: 保存的都是整数值, 且个数少于512个.
 //	hashtable: value设置为NULL
+//
 // sorted set:
 //		使用一个score进行排序, score由用户设置元素时指定.
 //	ziplist: v1,s1,v2,s2,... 且按照分值由小到大排序.
@@ -490,13 +493,13 @@ struct evictionPoolEntry {
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
 	// expires存储了键的过期时间, 值为过期时间点,绝对值.
-	// expires的key与dict的key指针指向同一个对象,所以不会有空间浪费, 出了dict本身的空间.
+	// expires的key与dict的key指针指向同一个对象,所以不会有空间浪费, 除dict本身的空间.
 	// 所以refcount不止用在int上面.
 	// 每次对key的操作都要有一次"是否超时"的判断吗? 那么时间复杂度的隐藏系数要直接乘2了
     dict *expires;              /* Timeout of keys with a timeout set */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP) */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
-	// 以db为纬度维护watched的key列表,键是key,值是列表,列表元素是监控该key的客户端,
+	// 以db维度维护watched的key列表,键是key,值是列表,列表元素是监控该key的客户端,
 	// 事务是不可以嵌套的,所以...
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
     struct evictionPoolEntry *eviction_pool;    /* Eviction pool of keys */
@@ -594,7 +597,11 @@ typedef struct redisClient {
     time_t ctime;           /* Client creation time */
     time_t lastinteraction; /* time of the last interaction, used for timeout */
     time_t obuf_soft_limit_reached_time;
+
+    // 在做多主的时候, 这里在这个字段里做些事情.
     int flags;              /* REDIS_SLAVE | REDIS_MONITOR | REDIS_MULTI ... */
+
+    // 这个对象应该是存在与server端的, 那么有些参数不理解为什么存在.
     int authenticated;      /* when requirepass is non-NULL */
     int replstate;          /* replication state if this is a slave */
     int repl_put_online_on_ack; /* Install slave write handler on ACK. */
@@ -609,6 +616,7 @@ typedef struct redisClient {
 	// 这个字段什么用途?
 	// 唯一的用途是在master执行 info replication 时输出配置信息.
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
+
 	// 事务逻辑里, 缓存多条指令.
     multiState mstate;      /* MULTI/EXEC state */
     int btype;              /* Type of blocking op if REDIS_BLOCKED. */
