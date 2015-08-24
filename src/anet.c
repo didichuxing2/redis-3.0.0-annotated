@@ -512,7 +512,6 @@ int anetUnixServer(char *err, char *path, mode_t perm, int backlog)
     return s;
 }
 
-// block
 static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *len) {
     int fd;
     while(1) {

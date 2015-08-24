@@ -70,11 +70,12 @@ redisClient *createClient(int fd) {
      * contexts (for instance a Lua script) we need a non connected client. */
 	// 对于这个函数来说, fd可以等于-1, 如果不等,则调用者应保证正确性.
     if (fd != -1) {
+        // accept 出来的 fd 继承了 listen-fd 的属性, 也是 non-block 的.
         anetNonBlock(NULL,fd);
         anetEnableTcpNoDelay(NULL,fd);
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
-		// 这里指定的时间处理器: readQueryFromClient
+		// 这里指定的事件处理器: readQueryFromClient
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -585,6 +586,7 @@ void copyClientOutputBuffer(redisClient *dst, redisClient *src) {
 #define MAX_ACCEPTS_PER_CALL 1000
 // 连接进来的一定是client? slave怎么处理?
 // 那里放入到事件队列里的?
+//      slave首先发送 sync/psync 等指令. 虽然是内部指令, 但是redis-cli也可以发起.
 //	A: createClient() 会调用 aeCreateFileEvent() 函数加入到事件队列里.
 static void acceptCommonHandler(int fd, int flags) {
     redisClient *c;
@@ -599,6 +601,8 @@ static void acceptCommonHandler(int fd, int flags) {
      * connection. Note that we create the client instead to check before
      * for this condition, since now the socket is already set in non-blocking
      * mode and we can send an error for free using the Kernel I/O */
+    // createClient() & freeClient() 实现了在 server.clients 列表的增减.
+    // 所以create以后才能正确计数.
     if (listLength(server.clients) > server.maxclients) {
         char *err = "-ERR max number of clients reached\r\n";
 
@@ -622,8 +626,10 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     REDIS_NOTUSED(privdata);
 
 	// 可能会有持续不断的连接请求进来,每次accept一个效率又太低.
+    // 所以也只能是LT
     while(max--) {
 		// 这里获取的ip/port仅仅用于日志输出吗?
+        // 是的呢.
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)

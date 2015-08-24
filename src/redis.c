@@ -1423,6 +1423,7 @@ void createSharedObjects(void) {
     shared.maxstring = createStringObject("maxstring",9);
 }
 
+// 这里设置都是默认参数
 void initServerConfig(void) {
     int j;
 
@@ -1561,6 +1562,7 @@ void initServerConfig(void) {
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
     populateCommandTable();
 	// 这几个什么意思?
+    // 为什么需要?
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
     server.lpushCommand = lookupCommandByCString("lpush");
@@ -1697,6 +1699,7 @@ void checkTcpBacklogSettings(void) {
  * impossible to bind, or no bind addresses were specified in the server
  * configuration but the function is not able to bind * for at least
  * one of the IPv4 or IPv6 protocols. */
+// 日, 地址竟然是通过 global server 传进来的...
 int listenToPort(int port, int *fds, int *count) {
     int j;
 
@@ -3578,6 +3581,7 @@ int checkForSentinelMode(int argc, char **argv) {
 void loadDataFromDisk(void) {
     long long start = ustime();
     if (server.aof_state == REDIS_AOF_ON) {
+        // 注意这个函数内部处理了读取失败, 直接exit().
         if (loadAppendOnlyFile(server.aof_filename) == REDIS_OK)
             redisLog(REDIS_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
     } else {
@@ -3621,7 +3625,7 @@ int main(int argc, char **argv) {
     spt_init(argc, argv);
 #endif
     setlocale(LC_COLLATE,"");
-    zmalloc_enable_thread_safeness();
+    zmalloc_enable_thread_safeness(); 
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
@@ -3643,6 +3647,7 @@ int main(int argc, char **argv) {
         char *configfile = NULL;
 
         /* Handle special options --help and --version */
+        // 注意 version & help 函数实现自带 exit()
         if (strcmp(argv[1], "-v") == 0 ||
             strcmp(argv[1], "--version") == 0) version();
         if (strcmp(argv[1], "--help") == 0 ||
@@ -3665,6 +3670,7 @@ int main(int argc, char **argv) {
          * configuration file. For instance --port 6380 will generate the
          * string "port 6380\n" to be parsed after the actual file name
          * is parsed, if any. */
+        // 看他是怎么实现 cmn-options 覆盖 config-file 的.
         while(j != argc) {
             if (argv[j][0] == '-' && argv[j][1] == '-') {
                 /* Option name */
@@ -3690,9 +3696,14 @@ int main(int argc, char **argv) {
         loadServerConfig(configfile,options);
         sdsfree(options);
     } else {
-        redisLog(REDIS_WARNING, "Warning: no config file specified, using the default config. In order to specify a config file use %s /path/to/%s.conf", argv[0], server.sentinel_mode ? "sentinel" : "redis");
+        redisLog(REDIS_WARNING, 
+            "Warning: no config file specified, using the default config. " \
+            "In order to specify a config file use %s /path/to/%s.conf", 
+            argv[0], server.sentinel_mode ? "sentinel" : "redis");
     }
     if (server.daemonize) daemonize();
+    // important!
+    // 初始化 server 等结构体
     initServer();
     if (server.daemonize) createPidFile();
     redisSetProcTitle(argv[0]);
